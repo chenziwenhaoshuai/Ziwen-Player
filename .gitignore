@@ -1,0 +1,12 @@
+.gradle/
+.kotlin/
+.idea/
+.tools/
+build/
+app/build/
+local.properties
+*.apk
+!release/*.apk
+*.aab
+*.iml
+/收款码.png
