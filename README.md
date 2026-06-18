@@ -1,6 +1,5 @@
-# 爱壹帆 TV APK
 
-这是一个 Android TV 原生菜单应用，把 `https://www.yfvod.com/` 当作数据源解析，展示分类、海报列表、详情页和剧集播放菜单。播放时优先捕获 `.m3u8` 并用 ExoPlayer 原生播放，捕获失败时回退到网页播放器。
+这是一个 Android TV 原生菜单应用。
 
 ## 功能
 
@@ -8,9 +7,6 @@
 - 原生分类侧栏和海报网格
 - 原生详情页和剧集播放菜单
 - 解析站点 HTML 提取影片、海报、简介、剧集
-- 参考 `crack-iyf` 的运行时捕获思路，拦截 WebView 内 `.m3u8`
-- 捕获到 `.m3u8` 后使用 Media3 ExoPlayer 播放
-- 捕获失败时回退网页播放器
 
 ## 打包
 
@@ -38,6 +34,6 @@ app\build\outputs\apk\debug\app-debug.apk
 C:\Users\HP\AppData\Local\Android\Sdk\platform-tools\adb.exe install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## 修改网站地址
+## 声明
 
-默认首页在 [MainActivity.java](app/src/main/java/com/yfvod/tv/MainActivity.java) 的 `HOME_URL` 常量里。
+本软件仅供开源学习，请勿用于侵权行为，作者不负任何责任。
