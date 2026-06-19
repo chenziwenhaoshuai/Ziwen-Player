@@ -145,22 +145,22 @@ public class MainActivity extends Activity {
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.HORIZONTAL);
-        page.setPadding(dp(32), dp(24), dp(32), dp(18));
+        page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
         root.addView(page, matchParams());
 
         navContainer = new LinearLayout(this);
         navContainer.setOrientation(LinearLayout.VERTICAL);
-        navContainer.setPadding(0, 0, dp(24), 0);
-        page.addView(navContainer, new LinearLayout.LayoutParams(dp(170), ViewGroup.LayoutParams.MATCH_PARENT));
+        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
+        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
 
-        TextView brand = label("子文播放器", 26, TEXT, true);
+        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
         brand.setGravity(Gravity.CENTER_VERTICAL);
-        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
+        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
 
         activeNavButton = null;
         TextView search = searchNavItem(false);
         search.setOnClickListener(v -> showSearch(""));
-        navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+        navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
 
         for (Category category : categories) {
             boolean selected = category.path.equals(path);
@@ -169,7 +169,7 @@ public class MainActivity extends Activity {
                 activeNavButton = item;
             }
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
-            navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+            navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
         }
         if (activeNavButton == null) {
             activeNavButton = search;
@@ -187,13 +187,13 @@ public class MainActivity extends Activity {
         catalogGrid = new GridView(this);
         catalogGrid.setNumColumns(5);
         catalogGrid.setHorizontalSpacing(dp(18));
-        catalogGrid.setVerticalSpacing(dp(14));
+        catalogGrid.setVerticalSpacing(dp(catalogVerticalSpacingDp()));
         catalogGrid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         catalogGrid.setSelector(android.R.color.transparent);
         catalogGrid.setFocusable(true);
         catalogGrid.setFocusableInTouchMode(false);
         catalogGrid.setClipToPadding(false);
-        catalogGrid.setPadding(0, dp(6), 0, dp(8));
+        catalogGrid.setPadding(0, dp(catalogTopPaddingDp()), 0, dp(catalogBottomPaddingDp()));
         videoAdapter = new VideoAdapter(new ArrayList<>());
         catalogGrid.setAdapter(videoAdapter);
         catalogGrid.setOnItemClickListener((parent, view, position, id) -> {
@@ -314,26 +314,26 @@ public class MainActivity extends Activity {
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.HORIZONTAL);
-        page.setPadding(dp(32), dp(24), dp(32), dp(18));
+        page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
         root.addView(page, matchParams());
 
         navContainer = new LinearLayout(this);
         navContainer.setOrientation(LinearLayout.VERTICAL);
-        navContainer.setPadding(0, 0, dp(24), 0);
-        page.addView(navContainer, new LinearLayout.LayoutParams(dp(170), ViewGroup.LayoutParams.MATCH_PARENT));
+        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
+        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
 
-        TextView brand = label("子文播放器", 26, TEXT, true);
+        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
         brand.setGravity(Gravity.CENTER_VERTICAL);
-        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
+        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
 
         TextView searchNav = searchNavItem(true);
         activeNavButton = searchNav;
         searchNav.setOnClickListener(v -> showSearch(initialKeyword));
-        navContainer.addView(searchNav, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+        navContainer.addView(searchNav, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
         for (Category category : categories) {
             TextView item = navItem(category.name, false);
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
-            navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+            navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
         }
         addDonationBox();
 
@@ -366,12 +366,12 @@ public class MainActivity extends Activity {
         catalogGrid = new GridView(this);
         catalogGrid.setNumColumns(5);
         catalogGrid.setHorizontalSpacing(dp(18));
-        catalogGrid.setVerticalSpacing(dp(14));
+        catalogGrid.setVerticalSpacing(dp(catalogVerticalSpacingDp()));
         catalogGrid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         catalogGrid.setSelector(android.R.color.transparent);
         catalogGrid.setFocusable(true);
         catalogGrid.setClipToPadding(false);
-        catalogGrid.setPadding(0, dp(8), 0, dp(8));
+        catalogGrid.setPadding(0, dp(catalogTopPaddingDp()), 0, dp(catalogBottomPaddingDp()));
         videoAdapter = new VideoAdapter(new ArrayList<>());
         catalogGrid.setAdapter(videoAdapter);
         catalogGrid.setOnItemClickListener((parent, view, position, id) -> {
@@ -463,22 +463,22 @@ public class MainActivity extends Activity {
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(36), dp(28), dp(36), dp(28));
+        page.setPadding(dp(detailHorizontalPaddingDp()), dp(detailVerticalPaddingDp()), dp(detailHorizontalPaddingDp()), dp(detailVerticalPaddingDp()));
         root.addView(page, matchParams());
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        page.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
+        page.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailTopHeightDp())));
 
         TextView back = button("返回", false);
         back.setOnClickListener(v -> showCatalog(currentTitle, currentPath));
-        top.addView(back, new LinearLayout.LayoutParams(dp(110), dp(48)));
+        top.addView(back, new LinearLayout.LayoutParams(dp(detailBackWidthDp()), dp(detailBackHeightDp())));
 
-        TextView title = label(detail.title, 28, TEXT, true);
+        TextView title = label(detail.title, detailTitleSp(), TEXT, true);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, dp(56), 1);
-        titleParams.leftMargin = dp(20);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, dp(detailTitleHeightDp()), 1);
+        titleParams.leftMargin = dp(detailTitleLeftMarginDp());
         top.addView(title, titleParams);
 
         LinearLayout body = new LinearLayout(this);
@@ -488,28 +488,28 @@ public class MainActivity extends Activity {
         ImageView poster = new ImageView(this);
         poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
         poster.setBackgroundColor(PANEL_2);
-        body.addView(poster, new LinearLayout.LayoutParams(dp(260), dp(378)));
+        body.addView(poster, new LinearLayout.LayoutParams(dp(detailPosterWidthDp()), dp(detailPosterHeightDp())));
         imageLoader.load(detail.poster, poster);
 
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams rightParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
-        rightParams.leftMargin = dp(28);
+        rightParams.leftMargin = dp(detailRightMarginDp());
         body.addView(right, rightParams);
 
-        TextView meta = label(detail.meta, 18, MUTED, false);
+        TextView meta = label(detail.meta, detailMetaSp(), MUTED, false);
         meta.setMaxLines(2);
-        right.addView(meta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+        right.addView(meta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailMetaHeightDp())));
 
-        TextView desc = label(detail.description, 17, MUTED, false);
-        desc.setLineSpacing(dp(2), 1.0f);
+        TextView desc = label(detail.description, detailDescSp(), MUTED, false);
+        desc.setLineSpacing(dp(detailDescLineSpacingDp()), 1.0f);
         ScrollView descScroll = new ScrollView(this);
         descScroll.addView(desc);
-        right.addView(descScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(118)));
+        right.addView(descScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailDescHeightDp())));
 
-        TextView sourceTitle = label("线路来源", 22, TEXT, true);
+        TextView sourceTitle = label("线路来源", detailSectionTitleSp(), TEXT, true);
         sourceTitle.setGravity(Gravity.CENTER_VERTICAL);
-        right.addView(sourceTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
+        right.addView(sourceTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailSectionTitleHeightDp())));
 
         currentSources = buildSourceGroups(detail.episodes);
         sourceScroll = new HorizontalScrollView(this);
@@ -521,16 +521,16 @@ public class MainActivity extends Activity {
         sourceRow.setOrientation(LinearLayout.HORIZONTAL);
         sourceScroll.addView(sourceRow, new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
         populateSourceRow();
-        right.addView(sourceScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
+        right.addView(sourceScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailSourceRowHeightDp())));
 
-        TextView episodeTitle = label("剧集", 22, TEXT, true);
+        TextView episodeTitle = label("剧集", detailSectionTitleSp(), TEXT, true);
         episodeTitle.setGravity(Gravity.CENTER_VERTICAL);
-        right.addView(episodeTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
+        right.addView(episodeTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailSectionTitleHeightDp())));
 
         episodeGrid = new GridView(this);
         episodeGrid.setNumColumns(6);
-        episodeGrid.setHorizontalSpacing(dp(12));
-        episodeGrid.setVerticalSpacing(dp(12));
+        episodeGrid.setHorizontalSpacing(dp(detailEpisodeSpacingDp()));
+        episodeGrid.setVerticalSpacing(dp(detailEpisodeSpacingDp()));
         episodeGrid.setSelector(android.R.color.transparent);
         episodeGrid.setFocusable(true);
         episodeGrid.setOnFocusChangeListener((v, hasFocus) -> {
@@ -620,14 +620,14 @@ public class MainActivity extends Activity {
         sourceRow.removeAllViews();
         for (int i = 0; i < currentSources.size(); i++) {
             final int index = i;
-            TextView view = label(currentSources.get(i).title, 16, TEXT, true);
+            TextView view = label(currentSources.get(i).title, detailSourceTextSp(), TEXT, true);
             view.setGravity(Gravity.CENTER);
             view.setSingleLine(true);
             view.setFocusable(false);
-            view.setPadding(dp(14), 0, dp(14), 0);
+            view.setPadding(dp(detailSourceHorizontalPaddingDp()), 0, dp(detailSourceHorizontalPaddingDp()), 0);
             view.setOnClickListener(v -> selectSource(index));
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(126), dp(46));
-            params.rightMargin = dp(10);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(detailSourceButtonWidthDp()), dp(detailSourceButtonHeightDp()));
+            params.rightMargin = dp(detailSourceButtonGapDp());
             sourceRow.addView(view, params);
         }
         refreshSourceRow();
@@ -912,7 +912,7 @@ public class MainActivity extends Activity {
     }
 
     private TextView navItem(String text, boolean selected) {
-        TextView view = label(text, 18, selected ? ACCENT : TEXT, true);
+        TextView view = label(text, navTextSp(), selected ? ACCENT : TEXT, true);
         view.setGravity(Gravity.CENTER_VERTICAL);
         view.setPadding(dp(20), 0, dp(12), 0);
         view.setFocusable(true);
@@ -953,17 +953,17 @@ public class MainActivity extends Activity {
         LinearLayout spacer = new LinearLayout(this);
         navContainer.addView(spacer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        TextView tip = label("如果喜欢请支付宝扫一扫赞助我", 12, MUTED, false);
+        TextView tip = label("如果喜欢请支付宝扫一扫赞助我", donationTipTextSp(), MUTED, false);
         tip.setGravity(Gravity.CENTER);
         tip.setMaxLines(2);
-        navContainer.addView(tip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
+        navContainer.addView(tip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(donationTipHeightDp())));
 
         ImageView qr = new ImageView(this);
         qr.setImageResource(getResources().getIdentifier("donation_qr", "drawable", getPackageName()));
         qr.setScaleType(ImageView.ScaleType.FIT_CENTER);
         qr.setFocusable(false);
-        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(118));
-        qrParams.topMargin = dp(6);
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(donationQrHeightDp()));
+        qrParams.topMargin = dp(donationQrTopMarginDp());
         navContainer.addView(qr, qrParams);
     }
 
@@ -1017,24 +1017,246 @@ public class MainActivity extends Activity {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    private int screenHeightDp() {
+        return (int) (getResources().getDisplayMetrics().heightPixels / getResources().getDisplayMetrics().density);
+    }
+
+    private boolean tinyLandscape() {
+        return screenHeightDp() < 420;
+    }
+
+    private boolean compactLandscape() {
+        return screenHeightDp() < 540;
+    }
+
+    private int pageHorizontalPaddingDp() {
+        return tinyLandscape() ? 16 : (compactLandscape() ? 22 : 32);
+    }
+
+    private int pageTopPaddingDp() {
+        return tinyLandscape() ? 8 : (compactLandscape() ? 12 : 24);
+    }
+
+    private int pageBottomPaddingDp() {
+        return tinyLandscape() ? 8 : (compactLandscape() ? 10 : 18);
+    }
+
+    private int navWidthDp() {
+        return tinyLandscape() ? 138 : (compactLandscape() ? 152 : 170);
+    }
+
+    private int navEndPaddingDp() {
+        return tinyLandscape() ? 12 : (compactLandscape() ? 16 : 24);
+    }
+
+    private int brandHeightDp() {
+        return tinyLandscape() ? 36 : (compactLandscape() ? 46 : 64);
+    }
+
+    private int brandTextSp() {
+        return tinyLandscape() ? 20 : (compactLandscape() ? 22 : 26);
+    }
+
+    private int navItemHeightDp() {
+        return tinyLandscape() ? 34 : (compactLandscape() ? 42 : 54);
+    }
+
+    private int navTextSp() {
+        return tinyLandscape() ? 15 : (compactLandscape() ? 16 : 18);
+    }
+
+    private int donationTipTextSp() {
+        return tinyLandscape() ? 9 : (compactLandscape() ? 10 : 12);
+    }
+
+    private int donationTipHeightDp() {
+        return tinyLandscape() ? 28 : (compactLandscape() ? 32 : 40);
+    }
+
+    private int donationQrHeightDp() {
+        return tinyLandscape() ? 58 : (compactLandscape() ? 82 : 118);
+    }
+
+    private int donationQrTopMarginDp() {
+        return tinyLandscape() ? 2 : (compactLandscape() ? 4 : 6);
+    }
+
+    private int catalogVerticalSpacingDp() {
+        return tinyLandscape() ? 8 : (compactLandscape() ? 10 : 14);
+    }
+
+    private int catalogTopPaddingDp() {
+        return tinyLandscape() ? 2 : (compactLandscape() ? 4 : 6);
+    }
+
+    private int catalogBottomPaddingDp() {
+        return tinyLandscape() ? 2 : (compactLandscape() ? 4 : 8);
+    }
+
+    private int cardPaddingDp() {
+        return tinyLandscape() ? 4 : (compactLandscape() ? 5 : 7);
+    }
+
+    private int videoPosterHeightDp() {
+        return tinyLandscape() ? 128 : (compactLandscape() ? 154 : 190);
+    }
+
+    private int videoTitleSp() {
+        return tinyLandscape() ? 13 : (compactLandscape() ? 14 : 15);
+    }
+
+    private int videoTitleHeightDp() {
+        return tinyLandscape() ? 36 : (compactLandscape() ? 40 : 48);
+    }
+
+    private int videoTitleTopMarginDp() {
+        return tinyLandscape() ? 3 : (compactLandscape() ? 4 : 6);
+    }
+
+    private int videoMetaSp() {
+        return tinyLandscape() ? 10 : (compactLandscape() ? 11 : 12);
+    }
+
+    private int videoMetaHeightDp() {
+        return tinyLandscape() ? 18 : (compactLandscape() ? 20 : 24);
+    }
+    private int detailHorizontalPaddingDp() {
+        return tinyLandscape() ? 14 : (compactLandscape() ? 20 : 36);
+    }
+
+    private int detailVerticalPaddingDp() {
+        return tinyLandscape() ? 8 : (compactLandscape() ? 14 : 28);
+    }
+
+    private int detailTopHeightDp() {
+        return tinyLandscape() ? 42 : (compactLandscape() ? 50 : 64);
+    }
+
+    private int detailBackWidthDp() {
+        return tinyLandscape() ? 86 : (compactLandscape() ? 96 : 110);
+    }
+
+    private int detailBackHeightDp() {
+        return tinyLandscape() ? 34 : (compactLandscape() ? 40 : 48);
+    }
+
+    private int detailTitleSp() {
+        return tinyLandscape() ? 20 : (compactLandscape() ? 23 : 28);
+    }
+
+    private int detailTitleHeightDp() {
+        return tinyLandscape() ? 38 : (compactLandscape() ? 44 : 56);
+    }
+
+    private int detailTitleLeftMarginDp() {
+        return tinyLandscape() ? 10 : (compactLandscape() ? 14 : 20);
+    }
+
+    private int detailPosterWidthDp() {
+        return tinyLandscape() ? 118 : (compactLandscape() ? 164 : 260);
+    }
+
+    private int detailPosterHeightDp() {
+        return tinyLandscape() ? 172 : (compactLandscape() ? 238 : 378);
+    }
+
+    private int detailRightMarginDp() {
+        return tinyLandscape() ? 12 : (compactLandscape() ? 18 : 28);
+    }
+
+    private int detailMetaSp() {
+        return tinyLandscape() ? 12 : (compactLandscape() ? 14 : 18);
+    }
+
+    private int detailMetaHeightDp() {
+        return tinyLandscape() ? 28 : (compactLandscape() ? 36 : 54);
+    }
+
+    private int detailDescSp() {
+        return tinyLandscape() ? 12 : (compactLandscape() ? 14 : 17);
+    }
+
+    private int detailDescLineSpacingDp() {
+        return tinyLandscape() ? 0 : 2;
+    }
+
+    private int detailDescHeightDp() {
+        return tinyLandscape() ? 36 : (compactLandscape() ? 58 : 118);
+    }
+
+    private int detailSectionTitleSp() {
+        return tinyLandscape() ? 15 : (compactLandscape() ? 18 : 22);
+    }
+
+    private int detailSectionTitleHeightDp() {
+        return tinyLandscape() ? 24 : (compactLandscape() ? 32 : 44);
+    }
+
+    private int detailSourceRowHeightDp() {
+        return tinyLandscape() ? 36 : (compactLandscape() ? 44 : 58);
+    }
+
+    private int detailSourceTextSp() {
+        return tinyLandscape() ? 12 : (compactLandscape() ? 14 : 16);
+    }
+
+    private int detailSourceButtonWidthDp() {
+        return tinyLandscape() ? 86 : (compactLandscape() ? 104 : 126);
+    }
+
+    private int detailSourceButtonHeightDp() {
+        return tinyLandscape() ? 30 : (compactLandscape() ? 36 : 46);
+    }
+
+    private int detailSourceHorizontalPaddingDp() {
+        return tinyLandscape() ? 8 : (compactLandscape() ? 10 : 14);
+    }
+
+    private int detailSourceButtonGapDp() {
+        return tinyLandscape() ? 6 : (compactLandscape() ? 8 : 10);
+    }
+
+    private int detailEpisodeSpacingDp() {
+        return tinyLandscape() ? 6 : (compactLandscape() ? 8 : 12);
+    }
+
+    private int detailEpisodeTextSp() {
+        return tinyLandscape() ? 13 : (compactLandscape() ? 15 : 17);
+    }
+
+    private int detailEpisodeHorizontalPaddingDp() {
+        return tinyLandscape() ? 4 : (compactLandscape() ? 6 : 8);
+    }
+
+    private int detailEpisodeCellHeightDp() {
+        return tinyLandscape() ? 36 : (compactLandscape() ? 44 : 54);
+    }
+
     private void keepScreenImmersive() {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        View decorView = getWindow().getDecorView();
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            WindowInsetsController controller = getWindow().getInsetsController();
+            WindowInsetsController controller = decorView.getWindowInsetsController();
             if (controller != null) {
                 controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                 controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            } else {
+                applyLegacyImmersiveFlags(decorView);
             }
         } else {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            );
+            applyLegacyImmersiveFlags(decorView);
         }
+    }
+
+    private void applyLegacyImmersiveFlags(View decorView) {
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
     }
 
     @Override
@@ -1401,24 +1623,24 @@ public class MainActivity extends Activity {
         VideoCard() {
             super(MainActivity.this);
             setOrientation(VERTICAL);
-            setPadding(dp(7), dp(7), dp(7), dp(7));
+            setPadding(dp(cardPaddingDp()), dp(cardPaddingDp()), dp(cardPaddingDp()), dp(cardPaddingDp()));
             setFocusable(false);
             setBackgroundColor(PANEL);
 
             poster = new ImageView(MainActivity.this);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
             poster.setBackgroundColor(PANEL_2);
-            addView(poster, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(190)));
+            addView(poster, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(videoPosterHeightDp())));
 
-            title = label("", 15, TEXT, true);
+            title = label("", videoTitleSp(), TEXT, true);
             title.setMaxLines(2);
-            LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-            titleParams.topMargin = dp(6);
+            LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(videoTitleHeightDp()));
+            titleParams.topMargin = dp(videoTitleTopMarginDp());
             addView(title, titleParams);
 
-            meta = label("", 12, MUTED, false);
+            meta = label("", videoMetaSp(), MUTED, false);
             meta.setMaxLines(1);
-            addView(meta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)));
+            addView(meta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(videoMetaHeightDp())));
 
         }
 
@@ -1484,16 +1706,16 @@ public class MainActivity extends Activity {
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
-            TextView view = convertView instanceof TextView ? (TextView) convertView : label("", 17, TEXT, true);
+            TextView view = convertView instanceof TextView ? (TextView) convertView : label("", detailEpisodeTextSp(), TEXT, true);
             Episode episode = getItem(position);
             view.setText(episode == null ? "" : episode.displayTitle());
             view.setGravity(Gravity.CENTER);
-            view.setPadding(dp(8), 0, dp(8), 0);
+            view.setPadding(dp(detailEpisodeHorizontalPaddingDp()), 0, dp(detailEpisodeHorizontalPaddingDp()), 0);
             boolean selected = position == selectedPosition && episodeGrid != null && episodeGrid.hasFocus();
             view.setTextColor(selected ? Color.BLACK : TEXT);
             view.setBackgroundColor(selected ? ACCENT : PANEL);
             view.setFocusable(false);
-            view.setLayoutParams(new AdapterView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
+            view.setLayoutParams(new AdapterView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(detailEpisodeCellHeightDp())));
             return view;
         }
     }

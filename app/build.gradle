@@ -15,16 +15,22 @@ android {
         minSdk {
             version = release(23)
         }
-        targetSdk {
-            version = release(36)
-        }
-        versionCode 1
-        versionName '1.0.0'
+        targetSdk 35
+        versionCode 3
+        versionName '1.0.2'
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+        }
     }
 }
 
@@ -33,3 +39,5 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-hls:1.8.0'
     implementation 'androidx.media3:media3-ui:1.8.0'
 }
+
+
