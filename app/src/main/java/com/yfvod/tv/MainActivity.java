@@ -24,6 +24,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
@@ -214,6 +215,19 @@ public class MainActivity extends Activity {
                 videoAdapter.setSelectedPosition(-1);
             }
         });
+        catalogGrid.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+            }
+
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+                if (visibleItemCount <= 0 || totalItemCount <= 0) {
+                    return;
+                }
+                loadMoreCatalogIfNeeded(firstVisibleItem + visibleItemCount - 1);
+            }
+        });
         content.addView(catalogGrid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         addOverlays();
@@ -309,6 +323,11 @@ public class MainActivity extends Activity {
         currentTitle = "搜索";
         currentPath = "/";
         currentVideo = null;
+        catalogPage = 1;
+        catalogLoadingMore = false;
+        catalogHasMore = false;
+        catalogPagedMode = false;
+        catalogPagingKind = "";
         root.removeAllViews();
         root.setBackgroundColor(BG);
 
