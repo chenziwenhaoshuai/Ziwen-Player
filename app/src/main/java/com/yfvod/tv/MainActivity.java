@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -40,10 +41,19 @@ import android.widget.TextView;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.database.StandaloneDatabaseProvider;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.cache.CacheDataSource;
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor;
+import androidx.media3.datasource.cache.SimpleCache;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -74,6 +84,11 @@ public class MainActivity extends Activity {
     private static final String TV_SHOW_PATH = "/vod-show/2--time---------.html";
     private static final String VARIETY_SHOW_PATH = "/vod-show/3--time---------.html";
     private static final String ANIMATION_SHOW_PATH = "/vod-show/4--time---------.html";
+    private static final long VIDEO_CACHE_MAX_BYTES = 1024L * 1024L * 1024L;
+    private static final String PREFS_NAME = "ziwen_player_settings";
+    private static final String PREF_PRELOAD_MINUTES = "preload_minutes";
+    private static final int DEFAULT_PRELOAD_MINUTES = 3;
+    private static final int[] PRELOAD_MINUTE_OPTIONS = new int[]{1, 2, 3, 5, 8};
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
@@ -97,6 +112,8 @@ public class MainActivity extends Activity {
     private PlayerView playerView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
+    private SimpleCache videoCache;
+    private StandaloneDatabaseProvider cacheDatabaseProvider;
     private PlayTarget pendingTarget;
     private Episode pendingEpisode;
     private boolean resolverFinished;
@@ -112,7 +129,7 @@ public class MainActivity extends Activity {
     private List<Episode> currentDetailEpisodes = new ArrayList<>();
     private List<SourceGroup> currentSources = new ArrayList<>();
     private int activeSourcePosition = 0;
-    private enum Screen { CATALOG, DETAIL, PLAYER, SEARCH }
+    private enum Screen { CATALOG, DETAIL, PLAYER, SEARCH, SETTINGS }
     private Screen screen = Screen.CATALOG;
 
     private final Category[] categories = new Category[]{
@@ -133,6 +150,7 @@ public class MainActivity extends Activity {
         setContentView(root);
         createLoading();
         createToast();
+        clearVideoCacheOnStartup();
         showCatalog("首页", "/");
     }
 
@@ -175,6 +193,7 @@ public class MainActivity extends Activity {
         if (activeNavButton == null) {
             activeNavButton = search;
         }
+        addSettingsNavItem(false);
         addDonationBox();
 
         LinearLayout content = new LinearLayout(this);
@@ -354,6 +373,7 @@ public class MainActivity extends Activity {
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
         }
+        addSettingsNavItem(false);
         addDonationBox();
 
         LinearLayout content = new LinearLayout(this);
@@ -458,6 +478,91 @@ public class MainActivity extends Activity {
                 main.post(() -> setLoading(false, "搜索失败：" + e.getMessage()));
             }
         });
+    }
+
+    private void showSettings() {
+        screen = Screen.SETTINGS;
+        currentVideo = null;
+        root.removeAllViews();
+        root.setBackgroundColor(BG);
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.HORIZONTAL);
+        page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
+        root.addView(page, matchParams());
+
+        navContainer = new LinearLayout(this);
+        navContainer.setOrientation(LinearLayout.VERTICAL);
+        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
+        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
+
+        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+
+        TextView search = searchNavItem(false);
+        search.setOnClickListener(v -> showSearch(""));
+        navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+
+        for (Category category : categories) {
+            TextView item = navItem(category.name, false);
+            item.setOnClickListener(v -> showCatalog(category.name, category.path));
+            navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+        }
+        TextView settingsNav = addSettingsNavItem(true);
+        activeNavButton = settingsNav;
+        addDonationBox();
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        page.addView(content, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+
+        TextView header = label("设置", 26, TEXT, true);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        content.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+
+        TextView preloadInfo = label("", 20, TEXT, true);
+        preloadInfo.setGravity(Gravity.CENTER_VERTICAL);
+        preloadInfo.setBackgroundColor(PANEL);
+        preloadInfo.setPadding(dp(22), 0, dp(22), 0);
+        content.addView(preloadInfo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
+
+        LinearLayout preloadControls = new LinearLayout(this);
+        preloadControls.setOrientation(LinearLayout.HORIZONTAL);
+        preloadControls.setGravity(Gravity.CENTER_VERTICAL);
+        content.addView(preloadControls, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)));
+
+        TextView decreasePreload = button("减少", false);
+        TextView increasePreload = button("增加", false);
+        LinearLayout.LayoutParams preloadButtonParams = new LinearLayout.LayoutParams(dp(120), dp(48));
+        preloadControls.addView(decreasePreload, preloadButtonParams);
+        LinearLayout.LayoutParams increaseParams = new LinearLayout.LayoutParams(dp(120), dp(48));
+        increaseParams.leftMargin = dp(14);
+        preloadControls.addView(increasePreload, increaseParams);
+
+        TextView cacheInfo = label("", 20, TEXT, true);
+        cacheInfo.setGravity(Gravity.CENTER_VERTICAL);
+        cacheInfo.setBackgroundColor(PANEL);
+        cacheInfo.setPadding(dp(22), 0, dp(22), 0);
+        content.addView(cacheInfo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)));
+
+        TextView cacheHelp = label("视频缓存用于提前保存 m3u8 切片，最多占用 1GB，超过后会自动清理最旧内容。", 16, MUTED, false);
+        cacheHelp.setGravity(Gravity.CENTER_VERTICAL);
+        cacheHelp.setPadding(dp(22), 0, dp(22), 0);
+        content.addView(cacheHelp, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)));
+
+        TextView clear = button("清理视频缓存", false);
+        clear.setOnClickListener(v -> clearVideoCache(cacheInfo));
+        decreasePreload.setOnClickListener(v -> changePreloadMinutes(-1, preloadInfo));
+        increasePreload.setOnClickListener(v -> changePreloadMinutes(1, preloadInfo));
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(dp(220), dp(54));
+        clearParams.topMargin = dp(18);
+        content.addView(clear, clearParams);
+
+        addOverlays();
+        updatePreloadInfo(preloadInfo);
+        updateCacheInfo(cacheInfo);
+        settingsNav.requestFocus();
     }
 
     private void loadDetail(VideoItem item) {
@@ -855,7 +960,10 @@ public class MainActivity extends Activity {
             playerView.setKeepScreenOn(true);
             playerView.setShowFastForwardButton(true);
             playerView.setShowRewindButton(true);
-            exoPlayer = new ExoPlayer.Builder(this).build();
+            exoPlayer = new ExoPlayer.Builder(this)
+                    .setLoadControl(createLoadControl())
+                    .setMediaSourceFactory(createMediaSourceFactory())
+                    .build();
             exoPlayer.addListener(new Player.Listener() {
                 @Override
                 public void onPlayerError(PlaybackException error) {
@@ -889,6 +997,170 @@ public class MainActivity extends Activity {
             playerView = null;
         }
     }
+
+    private DefaultLoadControl createLoadControl() {
+        int preloadMs = getPreloadMinutes() * 60_000;
+        return new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                        30_000,
+                        preloadMs,
+                        2_500,
+                        5_000
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build();
+    }
+
+    private DefaultMediaSourceFactory createMediaSourceFactory() {
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Linux; Android TV) AppleWebKit/537.36 ZiwenPlayer/1.0")
+                .setConnectTimeoutMs(10_000)
+                .setReadTimeoutMs(20_000)
+                .setAllowCrossProtocolRedirects(true);
+        DefaultDataSource.Factory upstreamFactory = new DefaultDataSource.Factory(this, httpFactory);
+        CacheDataSource.Factory cacheDataSourceFactory = new CacheDataSource.Factory()
+                .setCache(getVideoCache())
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
+        return new DefaultMediaSourceFactory(this)
+                .setDataSourceFactory(cacheDataSourceFactory);
+    }
+
+    private synchronized SimpleCache getVideoCache() {
+        if (videoCache == null) {
+            if (cacheDatabaseProvider == null) {
+                cacheDatabaseProvider = new StandaloneDatabaseProvider(this);
+            }
+            videoCache = new SimpleCache(
+                    videoCacheDir(),
+                    new LeastRecentlyUsedCacheEvictor(VIDEO_CACHE_MAX_BYTES),
+                    cacheDatabaseProvider
+            );
+        }
+        return videoCache;
+    }
+
+    private File videoCacheDir() {
+        return new File(getCacheDir(), "video_cache");
+    }
+
+    private SharedPreferences settingsPrefs() {
+        return getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+    }
+
+    private int getPreloadMinutes() {
+        int value = settingsPrefs().getInt(PREF_PRELOAD_MINUTES, DEFAULT_PRELOAD_MINUTES);
+        for (int option : PRELOAD_MINUTE_OPTIONS) {
+            if (option == value) {
+                return value;
+            }
+        }
+        return DEFAULT_PRELOAD_MINUTES;
+    }
+
+    private void changePreloadMinutes(int direction, TextView target) {
+        int current = getPreloadMinutes();
+        int index = 0;
+        for (int i = 0; i < PRELOAD_MINUTE_OPTIONS.length; i++) {
+            if (PRELOAD_MINUTE_OPTIONS[i] == current) {
+                index = i;
+                break;
+            }
+        }
+        int nextIndex = Math.max(0, Math.min(PRELOAD_MINUTE_OPTIONS.length - 1, index + direction));
+        int next = PRELOAD_MINUTE_OPTIONS[nextIndex];
+        settingsPrefs().edit().putInt(PREF_PRELOAD_MINUTES, next).apply();
+        updatePreloadInfo(target);
+        showHint("提前缓冲已设为 " + next + " 分钟");
+    }
+
+    private void updatePreloadInfo(TextView target) {
+        if (target != null) {
+            target.setText("提前缓冲：" + getPreloadMinutes() + " 分钟");
+        }
+    }
+
+    private void updateCacheInfo(TextView target) {
+        if (target == null) {
+            return;
+        }
+        executor.execute(() -> {
+            long bytes = folderSize(videoCacheDir());
+            main.post(() -> target.setText("视频缓存：" + formatBytes(bytes) + " / " + formatBytes(VIDEO_CACHE_MAX_BYTES)));
+        });
+    }
+
+    private void clearVideoCache(TextView cacheInfo) {
+        setLoading(true, "正在清理缓存...");
+        executor.execute(() -> {
+            releaseVideoCache();
+            deleteRecursively(videoCacheDir());
+            main.post(() -> {
+                setLoading(false, "缓存已清理");
+                updateCacheInfo(cacheInfo);
+            });
+        });
+    }
+
+    private void clearVideoCacheOnStartup() {
+        executor.execute(() -> {
+            releaseVideoCache();
+            deleteRecursively(videoCacheDir());
+        });
+    }
+
+    private synchronized void releaseVideoCache() {
+        if (videoCache != null) {
+            videoCache.release();
+            videoCache = null;
+        }
+    }
+
+    private static long folderSize(File file) {
+        if (file == null || !file.exists()) {
+            return 0L;
+        }
+        if (file.isFile()) {
+            return file.length();
+        }
+        long size = 0L;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                size += folderSize(child);
+            }
+        }
+        return size;
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        file.delete();
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes >= 1024L * 1024L * 1024L) {
+            return String.format(Locale.ROOT, "%.2fGB", bytes / 1024f / 1024f / 1024f);
+        }
+        if (bytes >= 1024L * 1024L) {
+            return String.format(Locale.ROOT, "%.1fMB", bytes / 1024f / 1024f);
+        }
+        if (bytes >= 1024L) {
+            return String.format(Locale.ROOT, "%.1fKB", bytes / 1024f);
+        }
+        return bytes + "B";
+    }
+
     private void createLoading() {
         loading = new ProgressBar(this, null, android.R.attr.progressBarStyleLarge);
         loading.setVisibility(View.GONE);
@@ -963,6 +1235,13 @@ public class MainActivity extends Activity {
             }
         });
         return view;
+    }
+
+    private TextView addSettingsNavItem(boolean selected) {
+        TextView item = navItem("设置", selected);
+        item.setOnClickListener(v -> showSettings());
+        navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+        return item;
     }
 
     private void addDonationBox() {
@@ -1469,6 +1748,10 @@ public class MainActivity extends Activity {
             showCatalog("首页", "/");
             return;
         }
+        if (screen == Screen.SETTINGS) {
+            showCatalog(currentTitle, currentPath);
+            return;
+        }
         if (screen == Screen.DETAIL) {
             showCatalog(currentTitle, currentPath);
             return;
@@ -1513,6 +1796,7 @@ public class MainActivity extends Activity {
         imageLoader.shutdown();
         cleanupResolver();
         releaseNativePlayer();
+        releaseVideoCache();
         if (playerWebView != null) {
             playerWebView.destroy();
         }
