@@ -71,6 +71,9 @@ import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 public class MainActivity extends Activity {
     private static final String BASE_URL = "https://www.yfvod.com";
     private static final int BG = 0xFF101318;
@@ -87,8 +90,11 @@ public class MainActivity extends Activity {
     private static final long VIDEO_CACHE_MAX_BYTES = 1024L * 1024L * 1024L;
     private static final String PREFS_NAME = "ziwen_player_settings";
     private static final String PREF_PRELOAD_MINUTES = "preload_minutes";
+    private static final String PREF_RECENT_WATCHES_LEGACY = "recent_watches";
+    private static final String PREF_RECENT_WATCHES = "recent_watches_v2";
     private static final int DEFAULT_PRELOAD_MINUTES = 3;
     private static final int[] PRELOAD_MINUTE_OPTIONS = new int[]{1, 2, 3, 5, 8};
+    private static final int RECENT_WATCH_LIMIT = 40;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
@@ -189,6 +195,9 @@ public class MainActivity extends Activity {
             }
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+            if ("/".equals(category.path)) {
+                addRecentNavItem(false);
+            }
         }
         if (activeNavButton == null) {
             activeNavButton = search;
@@ -310,6 +319,100 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void showRecentWatches() {
+        screen = Screen.CATALOG;
+        currentTitle = "最近观看";
+        currentPath = "/";
+        currentVideo = null;
+        catalogPage = 1;
+        catalogLoadingMore = false;
+        catalogHasMore = false;
+        catalogPagedMode = false;
+        catalogPagingKind = "";
+        root.removeAllViews();
+        root.setBackgroundColor(BG);
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.HORIZONTAL);
+        page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
+        root.addView(page, matchParams());
+
+        navContainer = new LinearLayout(this);
+        navContainer.setOrientation(LinearLayout.VERTICAL);
+        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
+        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
+
+        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+
+        TextView search = searchNavItem(false);
+        search.setOnClickListener(v -> showSearch(""));
+        navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+
+        activeNavButton = null;
+        for (Category category : categories) {
+            TextView item = navItem(category.name, false);
+            item.setOnClickListener(v -> showCatalog(category.name, category.path));
+            navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+            if ("/".equals(category.path)) {
+                activeNavButton = addRecentNavItem(true);
+            }
+        }
+        addSettingsNavItem(false);
+        addDonationBox();
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        page.addView(content, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+
+        TextView header = label("最近观看", 26, TEXT, true);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        content.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+
+        catalogGrid = new GridView(this);
+        catalogGrid.setNumColumns(5);
+        catalogGrid.setHorizontalSpacing(dp(18));
+        catalogGrid.setVerticalSpacing(dp(catalogVerticalSpacingDp()));
+        catalogGrid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
+        catalogGrid.setSelector(android.R.color.transparent);
+        catalogGrid.setFocusable(true);
+        catalogGrid.setFocusableInTouchMode(false);
+        catalogGrid.setClipToPadding(false);
+        catalogGrid.setPadding(0, dp(catalogTopPaddingDp()), 0, dp(catalogBottomPaddingDp()));
+        videoAdapter = new VideoAdapter(loadRecentWatches());
+        catalogGrid.setAdapter(videoAdapter);
+        catalogGrid.setOnItemClickListener((parent, view, position, id) -> {
+            VideoItem item = videoAdapter.getItem(position);
+            if (item != null) {
+                loadDetail(item);
+            }
+        });
+        catalogGrid.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                videoAdapter.setSelectedPosition(position);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                videoAdapter.setSelectedPosition(-1);
+            }
+        });
+        content.addView(catalogGrid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        addOverlays();
+        if (videoAdapter.getCount() > 0) {
+            catalogGrid.requestFocus();
+            catalogGrid.setSelection(0);
+        } else {
+            showHint("暂无最近观看");
+            if (activeNavButton != null) {
+                activeNavButton.requestFocus();
+            }
+        }
+    }
+
     private static String catalogPagingKind(String path) {
         if (MOVIE_TIME_PATH.equals(path)) {
             return "movie";
@@ -372,6 +475,9 @@ public class MainActivity extends Activity {
             TextView item = navItem(category.name, false);
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+            if ("/".equals(category.path)) {
+                addRecentNavItem(false);
+            }
         }
         addSettingsNavItem(false);
         addDonationBox();
@@ -508,6 +614,9 @@ public class MainActivity extends Activity {
             TextView item = navItem(category.name, false);
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+            if ("/".equals(category.path)) {
+                addRecentNavItem(false);
+            }
         }
         TextView settingsNav = addSettingsNavItem(true);
         activeNavButton = settingsNav;
@@ -975,6 +1084,7 @@ public class MainActivity extends Activity {
             playerView.setPlayer(exoPlayer);
             root.addView(playerView, matchParams());
             addOverlays();
+            saveRecentWatch();
             showHint("正在播放：" + target.title);
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(target.directUrl)));
             exoPlayer.prepare();
@@ -1046,6 +1156,68 @@ public class MainActivity extends Activity {
 
     private SharedPreferences settingsPrefs() {
         return getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+    }
+
+    private List<VideoItem> loadRecentWatches() {
+        ArrayList<VideoItem> items = new ArrayList<>();
+        String raw = settingsPrefs().getString(PREF_RECENT_WATCHES, "");
+        if (raw == null || raw.isEmpty()) {
+            return items;
+        }
+        try {
+            JSONArray array = new JSONArray(raw);
+            for (int i = 0; i < array.length() && items.size() < RECENT_WATCH_LIMIT; i++) {
+                JSONObject object = array.optJSONObject(i);
+                if (object == null) {
+                    continue;
+                }
+                String title = object.optString("title", "");
+                String url = object.optString("url", "");
+                String poster = object.optString("poster", "");
+                String remarks = object.optString("remarks", "");
+                if (!title.isEmpty() && !url.isEmpty()) {
+                    items.add(new VideoItem(title, url, poster, remarks));
+                }
+            }
+        } catch (Exception ignored) {
+            settingsPrefs().edit().remove(PREF_RECENT_WATCHES).apply();
+        }
+        settingsPrefs().edit().remove(PREF_RECENT_WATCHES_LEGACY).apply();
+        return items;
+    }
+
+    private void saveRecentWatch() {
+        if (currentVideo == null || currentVideo.url == null || currentVideo.url.isEmpty()) {
+            return;
+        }
+        ArrayList<VideoItem> items = new ArrayList<>();
+        items.add(currentVideo);
+        for (VideoItem item : loadRecentWatches()) {
+            if (item == null || item.url == null || item.url.equals(currentVideo.url)) {
+                continue;
+            }
+            items.add(item);
+            if (items.size() >= RECENT_WATCH_LIMIT) {
+                break;
+            }
+        }
+        JSONArray array = new JSONArray();
+        try {
+            for (VideoItem item : items) {
+                JSONObject object = new JSONObject();
+                object.put("title", nullToEmpty(item.title));
+                object.put("url", nullToEmpty(item.url));
+                object.put("poster", nullToEmpty(item.poster));
+                object.put("remarks", nullToEmpty(item.remarks));
+                array.put(object);
+            }
+            settingsPrefs().edit().putString(PREF_RECENT_WATCHES, array.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private int getPreloadMinutes() {
@@ -1240,6 +1412,13 @@ public class MainActivity extends Activity {
     private TextView addSettingsNavItem(boolean selected) {
         TextView item = navItem("设置", selected);
         item.setOnClickListener(v -> showSettings());
+        navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
+        return item;
+    }
+
+    private TextView addRecentNavItem(boolean selected) {
+        TextView item = navItem("最近观看", selected);
+        item.setOnClickListener(v -> showRecentWatches());
         navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
         return item;
     }
