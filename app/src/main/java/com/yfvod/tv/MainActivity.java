@@ -110,6 +110,7 @@ public class MainActivity extends Activity {
     private static final String PREF_PRELOAD_MINUTES = "preload_minutes";
     private static final String PREF_RECENT_WATCHES_LEGACY = "recent_watches";
     private static final String PREF_RECENT_WATCHES = "recent_watches_v2";
+    private static final String PREF_BETA_MODE = "beta_mode";
     private static final int DEFAULT_PRELOAD_MINUTES = 3;
     private static final int[] PRELOAD_MINUTE_OPTIONS = new int[]{1, 2, 3, 5, 8};
     private static final int RECENT_WATCH_LIMIT = 40;
@@ -181,6 +182,10 @@ public class MainActivity extends Activity {
     }
 
     private void showCatalog(String title, String path) {
+        if (PEACH_PATH.equals(path) && !isBetaModeEnabled()) {
+            showCatalog("首页", "/");
+            return;
+        }
         screen = Screen.CATALOG;
         currentTitle = title;
         currentPath = path;
@@ -201,7 +206,7 @@ public class MainActivity extends Activity {
         search.setOnClickListener(v -> showSearch(""));
         navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
 
-        for (Category category : categories) {
+        for (Category category : visibleCategories()) {
             boolean selected = category.path.equals(path);
             TextView item = navItem(category.name, selected);
             if (selected) {
@@ -359,7 +364,7 @@ public class MainActivity extends Activity {
         navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
 
         activeNavButton = null;
-        for (Category category : categories) {
+        for (Category category : visibleCategories()) {
             TextView item = navItem(category.name, false);
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
@@ -479,7 +484,7 @@ public class MainActivity extends Activity {
         activeNavButton = searchNav;
         searchNav.setOnClickListener(v -> showSearch(initialKeyword));
         navContainer.addView(searchNav, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
-        for (Category category : categories) {
+        for (Category category : visibleCategories()) {
             TextView item = navItem(category.name, false);
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
@@ -612,7 +617,7 @@ public class MainActivity extends Activity {
         search.setOnClickListener(v -> showSearch(""));
         navContainer.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
 
-        for (Category category : categories) {
+        for (Category category : visibleCategories()) {
             TextView item = navItem(category.name, false);
             item.setOnClickListener(v -> showCatalog(category.name, category.path));
             navContainer.addView(item, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(navItemHeightDp())));
@@ -669,6 +674,13 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(dp(220), dp(54));
         clearParams.topMargin = dp(18);
         content.addView(clear, clearParams);
+
+        TextView betaMode = button("", false);
+        updateBetaModeButton(betaMode);
+        betaMode.setOnClickListener(v -> toggleBetaMode(betaMode));
+        LinearLayout.LayoutParams betaParams = new LinearLayout.LayoutParams(dp(260), dp(54));
+        betaParams.topMargin = dp(18);
+        content.addView(betaMode, betaParams);
 
         addOverlays();
         updatePreloadInfo(preloadInfo);
@@ -1160,6 +1172,36 @@ public class MainActivity extends Activity {
         return getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
     }
 
+    private boolean isBetaModeEnabled() {
+        return settingsPrefs().getBoolean(PREF_BETA_MODE, false);
+    }
+
+    private List<Category> visibleCategories() {
+        ArrayList<Category> items = new ArrayList<>();
+        boolean betaMode = isBetaModeEnabled();
+        for (Category category : categories) {
+            if (PEACH_PATH.equals(category.path) && !betaMode) {
+                continue;
+            }
+            items.add(category);
+        }
+        return items;
+    }
+
+    private void toggleBetaMode(TextView target) {
+        boolean enabled = !isBetaModeEnabled();
+        settingsPrefs().edit().putBoolean(PREF_BETA_MODE, enabled).apply();
+        updateBetaModeButton(target);
+        showHint(enabled ? "内测模式已打开" : "内测模式已关闭");
+        showSettings();
+    }
+
+    private void updateBetaModeButton(TextView target) {
+        if (target != null) {
+            target.setText(isBetaModeEnabled() ? "内测模式：已开启" : "内测模式：未开启");
+        }
+    }
+
     private List<VideoItem> loadRecentWatches() {
         ArrayList<VideoItem> items = new ArrayList<>();
         String raw = settingsPrefs().getString(PREF_RECENT_WATCHES, "");
@@ -1177,8 +1219,14 @@ public class MainActivity extends Activity {
                 String url = object.optString("url", "");
                 String poster = object.optString("poster", "");
                 String remarks = object.optString("remarks", "");
+                String provider = object.optString("provider", url.startsWith(PEACH_PATH) ? "peach" : "");
+                String remoteId = object.optString("remoteId", url.startsWith(PEACH_PATH + "/detail/") ? url.substring((PEACH_PATH + "/detail/").length()) : "");
+                String playUrl = object.optString("playUrl", "");
+                if (url.startsWith(PEACH_PATH) && !isBetaModeEnabled()) {
+                    continue;
+                }
                 if (!title.isEmpty() && !url.isEmpty()) {
-                    items.add(new VideoItem(title, url, poster, remarks));
+                    items.add(new VideoItem(title, url, poster, remarks, provider, remoteId, playUrl));
                 }
             }
         } catch (Exception ignored) {
@@ -1211,6 +1259,9 @@ public class MainActivity extends Activity {
                 object.put("url", nullToEmpty(item.url));
                 object.put("poster", nullToEmpty(item.poster));
                 object.put("remarks", nullToEmpty(item.remarks));
+                object.put("provider", nullToEmpty(item.provider));
+                object.put("remoteId", nullToEmpty(item.remoteId));
+                object.put("playUrl", nullToEmpty(item.playUrl));
                 array.put(object);
             }
             settingsPrefs().edit().putString(PREF_RECENT_WATCHES, array.toString()).apply();
