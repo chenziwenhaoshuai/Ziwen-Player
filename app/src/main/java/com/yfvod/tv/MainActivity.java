@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Html;
+import android.util.Base64;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -37,6 +38,11 @@ import android.widget.ProgressBar;
 import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
@@ -87,6 +93,18 @@ public class MainActivity extends Activity {
     private static final String TV_SHOW_PATH = "/vod-show/2--time---------.html";
     private static final String VARIETY_SHOW_PATH = "/vod-show/3--time---------.html";
     private static final String ANIMATION_SHOW_PATH = "/vod-show/4--time---------.html";
+    private static final String PEACH_PATH = "peach://catalog";
+    private static final String PEACH_API_BASE = "https://sm-api.wieuc.com";
+    private static final String PEACH_SITE_ID = "2";
+    private static final String PEACH_CHANNEL_ID = "522";
+    private static final String PEACH_CHANNEL_NAME = "gj-89";
+    private static final String PEACH_IMAGE_HOST = "https://hm-img.twmjjy.com";
+    private static final String[] PEACH_PLAY_HOSTS = new String[]{
+            "https://hm-img.twmjjy.com",
+            "https://hm-vip.twmjjy.com",
+            "https://hm-img.aa66cc.live"
+    };
+    private static final String PEACH_FERNET_KEY = "NyGRG56A8i5J2JMqh7da83r2MMfgbM7Ppw1aCF8YnAY=";
     private static final long VIDEO_CACHE_MAX_BYTES = 1024L * 1024L * 1024L;
     private static final String PREFS_NAME = "ziwen_player_settings";
     private static final String PREF_PRELOAD_MINUTES = "preload_minutes";
@@ -108,6 +126,7 @@ public class MainActivity extends Activity {
     private HorizontalScrollView sourceScroll;
     private LinearLayout sourceRow;
     private GridView episodeGrid;
+    private LinearLayout navRail;
     private LinearLayout navContainer;
     private TextView activeNavButton;
     private VideoAdapter videoAdapter;
@@ -143,7 +162,8 @@ public class MainActivity extends Activity {
             new Category("电影", MOVIE_TIME_PATH),
             new Category("连续剧", TV_SHOW_PATH),
             new Category("综艺", VARIETY_SHOW_PATH),
-            new Category("动漫", ANIMATION_SHOW_PATH)
+            new Category("动漫", ANIMATION_SHOW_PATH),
+            new Category("你懂的", PEACH_PATH)
     };
 
     @Override
@@ -173,14 +193,8 @@ public class MainActivity extends Activity {
         page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
         root.addView(page, matchParams());
 
-        navContainer = new LinearLayout(this);
-        navContainer.setOrientation(LinearLayout.VERTICAL);
-        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
-        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
-
-        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+        LinearLayout left = createLeftRail(page);
+        addBrand(left);
 
         activeNavButton = null;
         TextView search = searchNavItem(false);
@@ -337,14 +351,8 @@ public class MainActivity extends Activity {
         page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
         root.addView(page, matchParams());
 
-        navContainer = new LinearLayout(this);
-        navContainer.setOrientation(LinearLayout.VERTICAL);
-        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
-        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
-
-        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+        LinearLayout left = createLeftRail(page);
+        addBrand(left);
 
         TextView search = searchNavItem(false);
         search.setOnClickListener(v -> showSearch(""));
@@ -426,10 +434,16 @@ public class MainActivity extends Activity {
         if (ANIMATION_SHOW_PATH.equals(path)) {
             return "4";
         }
+        if (PEACH_PATH.equals(path)) {
+            return "peach";
+        }
         return "";
     }
 
     private static String pagedCatalogPath(String kind, int page) {
+        if ("peach".equals(kind)) {
+            return PEACH_PATH + "?page=" + page;
+        }
         String id = "movie".equals(kind) ? "1" : kind;
         if (page <= 1) {
             if ("movie".equals(kind)) return MOVIE_TIME_PATH;
@@ -458,14 +472,8 @@ public class MainActivity extends Activity {
         page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
         root.addView(page, matchParams());
 
-        navContainer = new LinearLayout(this);
-        navContainer.setOrientation(LinearLayout.VERTICAL);
-        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
-        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
-
-        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+        LinearLayout left = createLeftRail(page);
+        addBrand(left);
 
         TextView searchNav = searchNavItem(true);
         activeNavButton = searchNav;
@@ -597,14 +605,8 @@ public class MainActivity extends Activity {
         page.setPadding(dp(pageHorizontalPaddingDp()), dp(pageTopPaddingDp()), dp(pageHorizontalPaddingDp()), dp(pageBottomPaddingDp()));
         root.addView(page, matchParams());
 
-        navContainer = new LinearLayout(this);
-        navContainer.setOrientation(LinearLayout.VERTICAL);
-        navContainer.setPadding(0, 0, dp(navEndPaddingDp()), 0);
-        page.addView(navContainer, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
-
-        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        navContainer.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+        LinearLayout left = createLeftRail(page);
+        addBrand(left);
 
         TextView search = searchNavItem(false);
         search.setOnClickListener(v -> showSearch(""));
@@ -1374,6 +1376,29 @@ public class MainActivity extends Activity {
         toast.postDelayed(() -> toast.setVisibility(View.GONE), 2200);
     }
 
+    private LinearLayout createLeftRail(LinearLayout page) {
+        LinearLayout left = new LinearLayout(this);
+        navRail = left;
+        left.setOrientation(LinearLayout.VERTICAL);
+        left.setPadding(0, 0, dp(navEndPaddingDp()), 0);
+        page.addView(left, new LinearLayout.LayoutParams(dp(navWidthDp()), ViewGroup.LayoutParams.MATCH_PARENT));
+        return left;
+    }
+
+    private void addBrand(LinearLayout left) {
+        TextView brand = label("子文播放器", brandTextSp(), TEXT, true);
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        left.addView(brand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(brandHeightDp())));
+
+        navContainer = new LinearLayout(this);
+        navContainer.setOrientation(LinearLayout.VERTICAL);
+        ScrollView navScroll = new ScrollView(this);
+        navScroll.setFillViewport(false);
+        navScroll.setVerticalScrollBarEnabled(false);
+        navScroll.addView(navContainer, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        left.addView(navScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+    }
+
     private TextView navItem(String text, boolean selected) {
         TextView view = label(text, navTextSp(), selected ? ACCENT : TEXT, true);
         view.setGravity(Gravity.CENTER_VERTICAL);
@@ -1424,16 +1449,13 @@ public class MainActivity extends Activity {
     }
 
     private void addDonationBox() {
-        if (navContainer == null) {
+        if (navRail == null) {
             return;
         }
-        LinearLayout spacer = new LinearLayout(this);
-        navContainer.addView(spacer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-
         TextView tip = label("如果喜欢请支付宝扫一扫赞助我", donationTipTextSp(), MUTED, false);
         tip.setGravity(Gravity.CENTER);
         tip.setMaxLines(2);
-        navContainer.addView(tip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(donationTipHeightDp())));
+        navRail.addView(tip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(donationTipHeightDp())));
 
         ImageView qr = new ImageView(this);
         qr.setImageResource(getResources().getIdentifier("donation_qr", "drawable", getPackageName()));
@@ -1441,7 +1463,7 @@ public class MainActivity extends Activity {
         qr.setFocusable(false);
         LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(donationQrHeightDp()));
         qrParams.topMargin = dp(donationQrTopMarginDp());
-        navContainer.addView(qr, qrParams);
+        navRail.addView(qr, qrParams);
     }
 
     private TextView button(String text, boolean selected) {
@@ -2219,13 +2241,7 @@ public class MainActivity extends Activity {
             }
             pool.execute(() -> {
                 try {
-                    HttpURLConnection connection = openConnection(absolutize(src));
-                    Bitmap bitmap;
-                    try (InputStream input = connection.getInputStream()) {
-                        bitmap = BitmapFactory.decodeStream(input);
-                    } finally {
-                        connection.disconnect();
-                    }
+                    Bitmap bitmap = loadBitmap(src);
                     if (bitmap != null) {
                         cache.put(src, bitmap);
                         main.post(() -> {
@@ -2239,6 +2255,23 @@ public class MainActivity extends Activity {
             });
         }
 
+        private Bitmap loadBitmap(String src) throws Exception {
+            if (src.startsWith("data:")) {
+                return decodeDataUrl(src);
+            }
+            String url = absolutize(src);
+            if (url.contains(".image")) {
+                String dataUrl = decodeEncryptedImage(url);
+                return decodeDataUrl(dataUrl);
+            }
+            HttpURLConnection connection = openConnection(url);
+            try (InputStream input = connection.getInputStream()) {
+                return BitmapFactory.decodeStream(input);
+            } finally {
+                connection.disconnect();
+            }
+        }
+
         void shutdown() {
             pool.shutdownNow();
         }
@@ -2249,6 +2282,9 @@ public class MainActivity extends Activity {
         private static final Pattern PLAY_LINK = Pattern.compile("(?is)<a\\b([^>]*)href=[\"']([^\"']*vod-play/([0-9]+)-(\\d+)-(\\d+)\\.html)[\"']([^>]*)>(.*?)</a>");
 
         List<VideoItem> fetchCatalog(String path) throws Exception {
+            if (path != null && path.startsWith(PEACH_PATH)) {
+                return fetchPeachCatalog(peachPage(path));
+            }
             String html = fetch(absolutize(path), BASE_URL + "/");
             LinkedHashMap<String, VideoItem> out = new LinkedHashMap<>();
             Matcher matcher = ANCHOR.matcher(html);
@@ -2288,6 +2324,9 @@ public class MainActivity extends Activity {
         }
 
         VideoDetail fetchDetail(VideoItem item) throws Exception {
+            if (item != null && item.isPeach()) {
+                return fetchPeachDetail(item);
+            }
             String html = fetch(item.url, BASE_URL + "/");
             String title = item.title;
             String pageTitle = between(html, "<title>", "</title>");
@@ -2365,6 +2404,9 @@ public class MainActivity extends Activity {
         }
 
         PlayTarget resolvePlayTarget(Episode episode) throws Exception {
+            if ("peach".equals(episode.from)) {
+                return new PlayTarget(episode.title, episode.path, episode.path, "peach");
+            }
             String playHtml = fetch(episode.path, BASE_URL + "/");
             String iframe = firstIframe(playHtml);
             String playerHtml = iframe.isEmpty() ? playHtml : fetch(absolutize(iframe), episode.path);
@@ -2381,6 +2423,110 @@ public class MainActivity extends Activity {
                 }
             }
             return new PlayTarget(title, episode.path, "", from);
+        }
+
+        private List<VideoItem> fetchPeachCatalog(int page) throws Exception {
+            String url = PEACH_API_BASE + "/api/vod/video?site_id=" + PEACH_SITE_ID
+                    + "&channel_id=" + PEACH_CHANNEL_ID
+                    + "&channel_name=" + Uri.encode(PEACH_CHANNEL_NAME)
+                    + "&page=" + page
+                    + "&per_page=24";
+            JSONObject data = fetchPeachData(url, "");
+            JSONArray items = data.optJSONArray("items");
+            ArrayList<VideoItem> out = new ArrayList<>();
+            if (items == null) {
+                return out;
+            }
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+                String id = item.optString("id", "");
+                String title = item.optString("name", "");
+                String poster = peachImageUrl(item.optString("pic", ""));
+                String playUrl = item.optString("play_url", "");
+                String duration = item.optString("duration", "");
+                String pubdate = item.optString("pubdate", "");
+                String meta = duration.isEmpty() ? pubdate : duration + (pubdate.isEmpty() ? "" : "  " + pubdate);
+                if (!id.isEmpty() && !title.isEmpty()) {
+                    out.add(new VideoItem(title, PEACH_PATH + "/detail/" + id, poster, meta, "peach", id, playUrl));
+                }
+            }
+            return out;
+        }
+
+        private VideoDetail fetchPeachDetail(VideoItem item) throws Exception {
+            JSONObject detail = item.remoteId.isEmpty() ? null : fetchPeachData(PEACH_API_BASE + "/api/vod/video/" + item.remoteId
+                    + "?site_id=" + PEACH_SITE_ID
+                    + "&channel_id=" + PEACH_CHANNEL_ID
+                    + "&channel_name=" + Uri.encode(PEACH_CHANNEL_NAME), "");
+            JSONObject data = detail == null ? new JSONObject() : detail;
+            String title = valueOr(data.optString("name", ""), item.title);
+            String poster = peachImageUrl(valueOr(data.optString("pic", ""), item.poster));
+            String playPath = valueOr(data.optString("play_url", ""), item.playUrl);
+            List<String> playUrls = peachPlayUrls(playPath);
+            String desc = valueOr(data.optString("description", ""), title);
+            String duration = data.optString("duration", "");
+            String pubdate = data.optString("pubdate", "");
+            String meta = duration.isEmpty() ? pubdate : duration + (pubdate.isEmpty() ? "" : "  " + pubdate);
+            ArrayList<Episode> episodes = new ArrayList<>();
+            for (int i = 0; i < playUrls.size(); i++) {
+                episodes.add(new Episode("播放", playUrls.get(i), i + 1, 1, "peach", "线路" + (i + 1)));
+            }
+            return new VideoDetail(title, poster, desc, meta, episodes);
+        }
+
+        private static JSONObject fetchPeachData(String url, String referer) throws Exception {
+            String raw = fetch(url, referer);
+            JSONObject payload = new JSONObject(raw);
+            String encrypted = payload.optString("x-data", "");
+            JSONObject body = encrypted.isEmpty() ? payload : new JSONObject(fernetDecrypt(encrypted, PEACH_FERNET_KEY));
+            if (body.optInt("code", 0) != 0) {
+                throw new IllegalStateException(body.optString("message", "API error"));
+            }
+            JSONObject data = body.optJSONObject("data");
+            return data == null ? new JSONObject() : data;
+        }
+
+        private static int peachPage(String path) {
+            if (path == null) {
+                return 1;
+            }
+            int index = path.indexOf("page=");
+            if (index < 0) {
+                return 1;
+            }
+            return Math.max(1, parseInt(path.substring(index + 5).replaceAll("[^0-9].*$", "")));
+        }
+
+        private static String peachImageUrl(String path) {
+            return absolutizeHost(PEACH_IMAGE_HOST, path);
+        }
+
+        private static List<String> peachPlayUrls(String path) {
+            ArrayList<String> out = new ArrayList<>();
+            for (String host : PEACH_PLAY_HOSTS) {
+                String url = absolutizeHost(host, path);
+                if (!url.isEmpty()) {
+                    out.add(url);
+                }
+            }
+            return out;
+        }
+
+        private static String absolutizeHost(String host, String path) {
+            if (path == null || path.isEmpty()) {
+                return "";
+            }
+            if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+                return path;
+            }
+            return host + (path.startsWith("/") ? path : "/" + path);
+        }
+
+        private static String valueOr(String value, String fallback) {
+            return value == null || value.isEmpty() ? (fallback == null ? "" : fallback) : value;
         }
 
         private static String fetch(String url, String referer) throws Exception {
@@ -2507,6 +2653,81 @@ public class MainActivity extends Activity {
         return connection;
     }
 
+    private static String decodeEncryptedImage(String url) throws Exception {
+        String text = readText(url, "");
+        String dataUrl;
+        int split = text.indexOf("@@@");
+        if (split >= 0) {
+            dataUrl = fernetDecrypt(text.substring(0, split), PEACH_FERNET_KEY) + text.substring(split + 3);
+        } else {
+            dataUrl = fernetDecrypt(text.trim(), PEACH_FERNET_KEY);
+        }
+        if (!dataUrl.startsWith("data:")) {
+            dataUrl = "data:image/jpeg;base64," + dataUrl;
+        }
+        return dataUrl;
+    }
+
+    private static Bitmap decodeDataUrl(String dataUrl) {
+        int comma = dataUrl.indexOf(',');
+        String payload = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+        byte[] bytes = Base64.decode(payload, Base64.DEFAULT);
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+    }
+
+    private static String readText(String url, String referer) throws Exception {
+        HttpURLConnection connection = openConnection(url);
+        if (referer != null && !referer.isEmpty()) {
+            connection.setRequestProperty("Referer", referer);
+        }
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+        } finally {
+            connection.disconnect();
+        }
+        return builder.toString();
+    }
+
+    private static String fernetDecrypt(String token, String key) throws Exception {
+        byte[] tokenBytes = base64UrlDecode(token);
+        byte[] keyBytes = base64UrlDecode(key);
+        if (tokenBytes.length < 57 || keyBytes.length != 32 || tokenBytes[0] != (byte) 0x80) {
+            throw new IllegalArgumentException("Invalid Fernet token");
+        }
+        byte[] signingKey = new byte[16];
+        byte[] encryptionKey = new byte[16];
+        System.arraycopy(keyBytes, 0, signingKey, 0, 16);
+        System.arraycopy(keyBytes, 16, encryptionKey, 0, 16);
+
+        int signatureStart = tokenBytes.length - 32;
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(signingKey, "HmacSHA256"));
+        byte[] expected = mac.doFinal(java.util.Arrays.copyOfRange(tokenBytes, 0, signatureStart));
+        byte[] actual = java.util.Arrays.copyOfRange(tokenBytes, signatureStart, tokenBytes.length);
+        if (!java.security.MessageDigest.isEqual(expected, actual)) {
+            throw new SecurityException("Invalid Fernet signature");
+        }
+
+        byte[] iv = java.util.Arrays.copyOfRange(tokenBytes, 9, 25);
+        byte[] cipherText = java.util.Arrays.copyOfRange(tokenBytes, 25, signatureStart);
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(encryptionKey, "AES"), new IvParameterSpec(iv));
+        return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
+    }
+
+    private static byte[] base64UrlDecode(String value) {
+        String normalized = value.trim();
+        int padding = (4 - normalized.length() % 4) % 4;
+        for (int i = 0; i < padding; i++) {
+            normalized += "=";
+        }
+        return Base64.decode(normalized, Base64.URL_SAFE | Base64.NO_WRAP);
+    }
+
     private static final String M3U8_CAPTURE_SCRIPT =
             "(function(){"
                     + "if(window.__yfvodCaptureInjected){return;}window.__yfvodCaptureInjected=true;"
@@ -2537,12 +2758,26 @@ public class MainActivity extends Activity {
         final String url;
         final String poster;
         final String remarks;
+        final String provider;
+        final String remoteId;
+        final String playUrl;
 
         VideoItem(String title, String url, String poster, String remarks) {
+            this(title, url, poster, remarks, "", "", "");
+        }
+
+        VideoItem(String title, String url, String poster, String remarks, String provider, String remoteId, String playUrl) {
             this.title = title;
             this.url = url;
             this.poster = poster;
             this.remarks = remarks;
+            this.provider = provider == null ? "" : provider;
+            this.remoteId = remoteId == null ? "" : remoteId;
+            this.playUrl = playUrl == null ? "" : playUrl;
+        }
+
+        boolean isPeach() {
+            return "peach".equals(provider);
         }
     }
 
