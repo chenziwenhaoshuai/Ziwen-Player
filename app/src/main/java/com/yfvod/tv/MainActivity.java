@@ -1,14 +1,11 @@
 package com.yfvod.tv;
 
 import android.app.Activity;
-import android.app.DownloadManager;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -69,6 +66,7 @@ import androidx.core.content.FileProvider;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -161,7 +159,6 @@ public class MainActivity extends Activity {
     private boolean playerStoppedForBackground;
     private boolean updateChecking;
     private boolean updateDownloading;
-    private long updateDownloadId = -1L;
     private String updateDownloadVersion = "";
     private File updateDownloadFile;
 
@@ -1367,60 +1364,66 @@ public class MainActivity extends Activity {
             updateDownloadVersion = info.versionName;
             String fileName = info.apkName == null || info.apkName.isEmpty() ? "Ziwen-Player-v" + info.versionName + ".apk" : info.apkName;
             updateDownloadFile = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
-            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(info.apkUrl));
-            request.setTitle("子文播放器 " + info.versionName);
-            request.setDescription("正在下载更新安装包");
-            request.setMimeType("application/vnd.android.package-archive");
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName);
-            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-            updateDownloadId = manager.enqueue(request);
+            File parent = updateDownloadFile.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            if (updateDownloadFile.exists()) {
+                updateDownloadFile.delete();
+            }
             setLoading(true, "正在下载更新...");
-            pollUpdateDownload();
+            executor.execute(() -> {
+                try {
+                    downloadFile(info.apkUrl, updateDownloadFile);
+                    main.post(() -> {
+                        updateDownloading = false;
+                        setLoading(false, "");
+                        installDownloadedApk();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        updateDownloading = false;
+                        setLoading(false, "");
+                        showHint("下载更新失败：" + e.getMessage());
+                    });
+                }
+            });
         } catch (Exception e) {
             updateDownloading = false;
-            updateDownloadId = -1L;
             setLoading(false, "");
             showHint("下载更新失败：" + e.getMessage());
         }
     }
 
-    private void pollUpdateDownload() {
-        if (!updateDownloading || updateDownloadId < 0) {
+    private static void downloadFile(String url, File target) throws Exception {
+        HttpURLConnection connection = openConnection(url);
+        connection.setInstanceFollowRedirects(true);
+        int code = connection.getResponseCode();
+        if (code >= 300 && code < 400) {
+            String location = connection.getHeaderField("Location");
+            connection.disconnect();
+            if (location == null || location.isEmpty()) {
+                throw new IllegalStateException("下载重定向无效");
+            }
+            downloadFile(location, target);
             return;
         }
-        main.postDelayed(() -> {
-            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-            DownloadManager.Query query = new DownloadManager.Query().setFilterById(updateDownloadId);
-            try (Cursor cursor = manager.query(query)) {
-                if (cursor == null || !cursor.moveToFirst()) {
-                    updateDownloading = false;
-                    updateDownloadId = -1L;
-                    setLoading(false, "");
-                    showHint("下载更新失败");
-                    return;
-                }
-                int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
-                if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    updateDownloading = false;
-                    updateDownloadId = -1L;
-                    setLoading(false, "");
-                    installDownloadedApk();
-                } else if (status == DownloadManager.STATUS_FAILED) {
-                    updateDownloading = false;
-                    updateDownloadId = -1L;
-                    setLoading(false, "");
-                    showHint("下载更新失败");
-                } else {
-                    pollUpdateDownload();
-                }
-            } catch (Exception e) {
-                updateDownloading = false;
-                updateDownloadId = -1L;
-                setLoading(false, "");
-                showHint("下载状态读取失败：" + e.getMessage());
+        if (code < 200 || code >= 300) {
+            throw new IllegalStateException("HTTP " + code);
+        }
+        try (InputStream input = connection.getInputStream();
+             FileOutputStream output = new FileOutputStream(target)) {
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
             }
-        }, 1200);
+        } finally {
+            connection.disconnect();
+        }
+        if (!target.exists() || target.length() < 1024 * 1024) {
+            throw new IllegalStateException("安装包不完整");
+        }
     }
 
     private void installDownloadedApk() {
