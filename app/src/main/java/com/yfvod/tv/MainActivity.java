@@ -1267,7 +1267,7 @@ public class MainActivity extends Activity {
 
     private void updateVersionInfo(TextView target) {
         if (target != null) {
-            target.setText("当前版本：" + currentVersionName() + " (" + currentVersionCode() + ")");
+            target.setText("当前版本：" + currentVersionName());
         }
     }
 
