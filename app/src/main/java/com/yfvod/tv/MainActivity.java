@@ -1329,7 +1329,7 @@ public class MainActivity extends Activity {
     }
 
     private UpdateInfo fetchLatestUpdate() throws Exception {
-        String raw = readText(UPDATE_API_URL, BASE_URL + "/");
+        String raw = readUpdateTextWithRetry(UPDATE_API_URL);
         JSONObject release = new JSONObject(raw);
         String tag = release.optString("tag_name", "");
         String versionName = normalizeVersionName(tag);
@@ -1354,6 +1354,18 @@ public class MainActivity extends Activity {
         return new UpdateInfo(versionName, versionCode, apkName, apkUrl);
     }
 
+    private static String readUpdateTextWithRetry(String url) throws Exception {
+        Exception last = null;
+        for (int i = 0; i < 3; i++) {
+            try {
+                return readUpdateText(url);
+            } catch (Exception e) {
+                last = e;
+            }
+        }
+        throw last == null ? new IllegalStateException("检查更新失败") : last;
+    }
+
     private void downloadUpdate(UpdateInfo info) {
         if (info == null || info.apkUrl.isEmpty()) {
             showHint("更新地址无效");
@@ -1374,7 +1386,7 @@ public class MainActivity extends Activity {
             setLoading(true, "正在下载更新...");
             executor.execute(() -> {
                 try {
-                    downloadFile(info.apkUrl, updateDownloadFile);
+                    downloadUpdateFileWithRetry(info.apkUrl, updateDownloadFile);
                     main.post(() -> {
                         updateDownloading = false;
                         setLoading(false, "");
@@ -1395,8 +1407,24 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static void downloadFile(String url, File target) throws Exception {
-        HttpURLConnection connection = openConnection(url);
+    private static void downloadUpdateFileWithRetry(String url, File target) throws Exception {
+        Exception last = null;
+        for (int i = 0; i < 3; i++) {
+            try {
+                downloadUpdateFile(url, target);
+                return;
+            } catch (Exception e) {
+                last = e;
+                if (target != null && target.exists()) {
+                    target.delete();
+                }
+            }
+        }
+        throw last == null ? new IllegalStateException("下载失败") : last;
+    }
+
+    private static void downloadUpdateFile(String url, File target) throws Exception {
+        HttpURLConnection connection = openUpdateConnection(url);
         connection.setInstanceFollowRedirects(true);
         int code = connection.getResponseCode();
         if (code >= 300 && code < 400) {
@@ -1405,7 +1433,7 @@ public class MainActivity extends Activity {
             if (location == null || location.isEmpty()) {
                 throw new IllegalStateException("下载重定向无效");
             }
-            downloadFile(location, target);
+            downloadUpdateFile(location, target);
             return;
         }
         if (code < 200 || code >= 300) {
@@ -1424,6 +1452,29 @@ public class MainActivity extends Activity {
         if (!target.exists() || target.length() < 1024 * 1024) {
             throw new IllegalStateException("安装包不完整");
         }
+    }
+
+    private static String readUpdateText(String url) throws Exception {
+        HttpURLConnection connection = openUpdateConnection(url);
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line).append('\n');
+            }
+        } finally {
+            connection.disconnect();
+        }
+        return builder.toString();
+    }
+
+    private static HttpURLConnection openUpdateConnection(String url) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setConnectTimeout(20_000);
+        connection.setReadTimeout(60_000);
+        connection.setRequestProperty("User-Agent", "Ziwen-Player-Updater/1.0 Android");
+        connection.setRequestProperty("Accept", "application/vnd.github+json,application/octet-stream,*/*");
+        return connection;
     }
 
     private void installDownloadedApk() {
