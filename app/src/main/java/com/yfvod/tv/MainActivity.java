@@ -1,14 +1,22 @@
 package com.yfvod.tv;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.content.pm.PackageInfo;
+import android.provider.Settings;
 import android.text.Html;
 import android.util.Base64;
 import android.view.Gravity;
@@ -57,6 +65,7 @@ import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
+import androidx.core.content.FileProvider;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -105,12 +114,18 @@ public class MainActivity extends Activity {
             "https://hm-img.aa66cc.live"
     };
     private static final String PEACH_FERNET_KEY = "NyGRG56A8i5J2JMqh7da83r2MMfgbM7Ppw1aCF8YnAY=";
+    private static final String UPDATE_API_URL = "https://api.github.com/repos/chenziwenhaoshuai/Ziwen-Player/releases/latest";
+    private static final String UPDATE_APK_PREFIX = "Ziwen-Player-v";
+    private static final String UPDATE_APK_SUFFIX = ".apk";
     private static final long VIDEO_CACHE_MAX_BYTES = 1024L * 1024L * 1024L;
     private static final String PREFS_NAME = "ziwen_player_settings";
     private static final String PREF_PRELOAD_MINUTES = "preload_minutes";
     private static final String PREF_RECENT_WATCHES_LEGACY = "recent_watches";
     private static final String PREF_RECENT_WATCHES = "recent_watches_v2";
     private static final String PREF_BETA_MODE = "beta_mode";
+    private static final String PREF_AUTO_UPDATE_CHECK = "auto_update_check";
+    private static final String PREF_LAST_AUTO_UPDATE_CHECK = "last_auto_update_check";
+    private static final long AUTO_UPDATE_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L;
     private static final int DEFAULT_PRELOAD_MINUTES = 3;
     private static final int[] PRELOAD_MINUTE_OPTIONS = new int[]{1, 2, 3, 5, 8};
     private static final int RECENT_WATCH_LIMIT = 40;
@@ -144,6 +159,11 @@ public class MainActivity extends Activity {
     private Episode pendingEpisode;
     private boolean resolverFinished;
     private boolean playerStoppedForBackground;
+    private boolean updateChecking;
+    private boolean updateDownloading;
+    private long updateDownloadId = -1L;
+    private String updateDownloadVersion = "";
+    private File updateDownloadFile;
 
     private String currentTitle = "首页";
     private String currentPath = "/";
@@ -180,6 +200,7 @@ public class MainActivity extends Activity {
         createToast();
         clearVideoCacheOnStartup();
         showCatalog("首页", "/");
+        maybeCheckUpdateOnStartup();
     }
 
     private void showCatalog(String title, String path) {
@@ -689,9 +710,30 @@ public class MainActivity extends Activity {
         betaParams.topMargin = dp(18);
         content.addView(betaMode, betaParams);
 
+        TextView versionInfo = label("", 18, MUTED, false);
+        versionInfo.setGravity(Gravity.CENTER_VERTICAL);
+        versionInfo.setPadding(dp(22), 0, dp(22), 0);
+        LinearLayout.LayoutParams versionParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        versionParams.topMargin = dp(16);
+        content.addView(versionInfo, versionParams);
+
+        TextView checkUpdate = button("检查更新", false);
+        checkUpdate.setOnClickListener(v -> checkForUpdates(false));
+        LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(dp(220), dp(54));
+        updateParams.topMargin = dp(10);
+        content.addView(checkUpdate, updateParams);
+
+        TextView autoUpdate = button("", false);
+        updateAutoUpdateButton(autoUpdate);
+        autoUpdate.setOnClickListener(v -> toggleAutoUpdateCheck(autoUpdate));
+        LinearLayout.LayoutParams autoUpdateParams = new LinearLayout.LayoutParams(dp(300), dp(54));
+        autoUpdateParams.topMargin = dp(18);
+        content.addView(autoUpdate, autoUpdateParams);
+
         addOverlays();
         updatePreloadInfo(preloadInfo);
         updateCacheInfo(cacheInfo);
+        updateVersionInfo(versionInfo);
         settingsNav.requestFocus();
     }
 
@@ -1206,6 +1248,289 @@ public class MainActivity extends Activity {
     private void updateBetaModeButton(TextView target) {
         if (target != null) {
             target.setText(isBetaModeEnabled() ? "内测模式：已开启" : "内测模式：未开启");
+        }
+    }
+
+    private boolean isAutoUpdateCheckEnabled() {
+        return settingsPrefs().getBoolean(PREF_AUTO_UPDATE_CHECK, false);
+    }
+
+    private void toggleAutoUpdateCheck(TextView target) {
+        boolean enabled = !isAutoUpdateCheckEnabled();
+        settingsPrefs().edit().putBoolean(PREF_AUTO_UPDATE_CHECK, enabled).apply();
+        updateAutoUpdateButton(target);
+        showHint(enabled ? "启动时自动检查更新已开启" : "启动时自动检查更新已关闭");
+    }
+
+    private void updateAutoUpdateButton(TextView target) {
+        if (target != null) {
+            target.setText(isAutoUpdateCheckEnabled() ? "自动检查更新：已开启" : "自动检查更新：未开启");
+        }
+    }
+
+    private void updateVersionInfo(TextView target) {
+        if (target != null) {
+            target.setText("当前版本：" + currentVersionName() + " (" + currentVersionCode() + ")");
+        }
+    }
+
+    private void maybeCheckUpdateOnStartup() {
+        if (!isAutoUpdateCheckEnabled()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long last = settingsPrefs().getLong(PREF_LAST_AUTO_UPDATE_CHECK, 0L);
+        if (now - last < AUTO_UPDATE_CHECK_INTERVAL_MS) {
+            return;
+        }
+        settingsPrefs().edit().putLong(PREF_LAST_AUTO_UPDATE_CHECK, now).apply();
+        main.postDelayed(() -> checkForUpdates(true), 1800);
+    }
+
+    private void checkForUpdates(boolean automatic) {
+        if (updateChecking || updateDownloading) {
+            if (!automatic) {
+                showHint("正在检查或下载更新");
+            }
+            return;
+        }
+        updateChecking = true;
+        if (!automatic) {
+            setLoading(true, "正在检查更新...");
+        }
+        executor.execute(() -> {
+            try {
+                UpdateInfo info = fetchLatestUpdate();
+                main.post(() -> {
+                    updateChecking = false;
+                    setLoading(false, "");
+                    if (info == null || info.apkUrl.isEmpty()) {
+                        if (!automatic) {
+                            showHint("没有找到可安装的 APK");
+                        }
+                        return;
+                    }
+                    if (compareVersionNames(info.versionName, currentVersionName()) <= 0) {
+                        if (!automatic) {
+                            showHint("已是最新版本：" + currentVersionName());
+                        }
+                        return;
+                    }
+                    showHint("发现新版本 " + info.versionName + "，开始下载");
+                    downloadUpdate(info);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    updateChecking = false;
+                    setLoading(false, "");
+                    if (!automatic) {
+                        showHint("检查更新失败：" + e.getMessage());
+                    }
+                });
+            }
+        });
+    }
+
+    private UpdateInfo fetchLatestUpdate() throws Exception {
+        String raw = readText(UPDATE_API_URL, BASE_URL + "/");
+        JSONObject release = new JSONObject(raw);
+        String tag = release.optString("tag_name", "");
+        String versionName = normalizeVersionName(tag);
+        int versionCode = versionCodeFromName(versionName);
+        String apkUrl = "";
+        String apkName = "";
+        JSONArray assets = release.optJSONArray("assets");
+        if (assets != null) {
+            for (int i = 0; i < assets.length(); i++) {
+                JSONObject asset = assets.optJSONObject(i);
+                if (asset == null) {
+                    continue;
+                }
+                String name = asset.optString("name", "");
+                if (name.startsWith(UPDATE_APK_PREFIX) && name.endsWith(UPDATE_APK_SUFFIX)) {
+                    apkName = name;
+                    apkUrl = asset.optString("browser_download_url", "");
+                    break;
+                }
+            }
+        }
+        return new UpdateInfo(versionName, versionCode, apkName, apkUrl);
+    }
+
+    private void downloadUpdate(UpdateInfo info) {
+        if (info == null || info.apkUrl.isEmpty()) {
+            showHint("更新地址无效");
+            return;
+        }
+        try {
+            updateDownloading = true;
+            updateDownloadVersion = info.versionName;
+            String fileName = info.apkName == null || info.apkName.isEmpty() ? "Ziwen-Player-v" + info.versionName + ".apk" : info.apkName;
+            updateDownloadFile = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(info.apkUrl));
+            request.setTitle("子文播放器 " + info.versionName);
+            request.setDescription("正在下载更新安装包");
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName);
+            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            updateDownloadId = manager.enqueue(request);
+            setLoading(true, "正在下载更新...");
+            pollUpdateDownload();
+        } catch (Exception e) {
+            updateDownloading = false;
+            updateDownloadId = -1L;
+            setLoading(false, "");
+            showHint("下载更新失败：" + e.getMessage());
+        }
+    }
+
+    private void pollUpdateDownload() {
+        if (!updateDownloading || updateDownloadId < 0) {
+            return;
+        }
+        main.postDelayed(() -> {
+            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            DownloadManager.Query query = new DownloadManager.Query().setFilterById(updateDownloadId);
+            try (Cursor cursor = manager.query(query)) {
+                if (cursor == null || !cursor.moveToFirst()) {
+                    updateDownloading = false;
+                    updateDownloadId = -1L;
+                    setLoading(false, "");
+                    showHint("下载更新失败");
+                    return;
+                }
+                int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    updateDownloading = false;
+                    updateDownloadId = -1L;
+                    setLoading(false, "");
+                    installDownloadedApk();
+                } else if (status == DownloadManager.STATUS_FAILED) {
+                    updateDownloading = false;
+                    updateDownloadId = -1L;
+                    setLoading(false, "");
+                    showHint("下载更新失败");
+                } else {
+                    pollUpdateDownload();
+                }
+            } catch (Exception e) {
+                updateDownloading = false;
+                updateDownloadId = -1L;
+                setLoading(false, "");
+                showHint("下载状态读取失败：" + e.getMessage());
+            }
+        }, 1200);
+    }
+
+    private void installDownloadedApk() {
+        if (updateDownloadFile == null || !updateDownloadFile.exists()) {
+            showHint("安装包路径无效");
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+            showHint("请允许安装未知来源应用后再安装");
+            Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+            return;
+        }
+        try {
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", updateDownloadFile);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            showHint("下载完成，请确认安装 " + updateDownloadVersion);
+            startActivity(intent);
+        } catch (Exception e) {
+            showHint("打开安装器失败：" + e.getMessage());
+        }
+    }
+
+    private void resumePendingUpdateInstallIfAllowed() {
+        if (updateDownloadFile == null || !updateDownloadFile.exists()) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || getPackageManager().canRequestPackageInstalls()) {
+            main.postDelayed(this::installDownloadedApk, 600);
+        }
+    }
+
+    private String currentVersionName() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionName == null ? "" : info.versionName;
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private long currentVersionCode() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return info.getLongVersionCode();
+            }
+            return info.versionCode;
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
+    private static String normalizeVersionName(String tag) {
+        if (tag == null) {
+            return "";
+        }
+        String value = tag.trim();
+        if (value.startsWith("v") || value.startsWith("V")) {
+            value = value.substring(1);
+        }
+        return value;
+    }
+
+    private static int versionCodeFromName(String versionName) {
+        if (versionName == null || versionName.isEmpty()) {
+            return 0;
+        }
+        Matcher matcher = Pattern.compile("(\\d+)").matcher(versionName);
+        int code = 0;
+        while (matcher.find()) {
+            code = code * 100 + safeParseInt(matcher.group(1));
+        }
+        return code;
+    }
+
+    private static int compareVersionNames(String left, String right) {
+        int[] a = versionParts(left);
+        int[] b = versionParts(right);
+        int count = Math.max(a.length, b.length);
+        for (int i = 0; i < count; i++) {
+            int av = i < a.length ? a[i] : 0;
+            int bv = i < b.length ? b[i] : 0;
+            if (av != bv) {
+                return av > bv ? 1 : -1;
+            }
+        }
+        return 0;
+    }
+
+    private static int[] versionParts(String versionName) {
+        ArrayList<Integer> parts = new ArrayList<>();
+        Matcher matcher = Pattern.compile("(\\d+)").matcher(versionName == null ? "" : versionName);
+        while (matcher.find()) {
+            parts.add(safeParseInt(matcher.group(1)));
+        }
+        int[] out = new int[parts.size()];
+        for (int i = 0; i < parts.size(); i++) {
+            out[i] = parts.get(i);
+        }
+        return out;
+    }
+
+    private static int safeParseInt(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception ignored) {
+            return 0;
         }
     }
 
@@ -2060,6 +2385,7 @@ public class MainActivity extends Activity {
             playerStoppedForBackground = false;
             closePlayer();
         }
+        resumePendingUpdateInstallIfAllowed();
     }
 
     @Override
@@ -2861,6 +3187,20 @@ public class MainActivity extends Activity {
         Category(String name, String path) {
             this.name = name;
             this.path = path;
+        }
+    }
+
+    private static final class UpdateInfo {
+        final String versionName;
+        final int versionCode;
+        final String apkName;
+        final String apkUrl;
+
+        UpdateInfo(String versionName, int versionCode, String apkName, String apkUrl) {
+            this.versionName = versionName == null ? "" : versionName;
+            this.versionCode = versionCode;
+            this.apkName = apkName == null ? "" : apkName;
+            this.apkUrl = apkUrl == null ? "" : apkUrl;
         }
     }
 
