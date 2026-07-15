@@ -143,6 +143,7 @@ public class MainActivity extends Activity {
     private PlayTarget pendingTarget;
     private Episode pendingEpisode;
     private boolean resolverFinished;
+    private boolean playerStoppedForBackground;
 
     private String currentTitle = "首页";
     private String currentPath = "/";
@@ -629,9 +630,15 @@ public class MainActivity extends Activity {
         activeNavButton = settingsNav;
         addDonationBox();
 
+        ScrollView contentScroll = new ScrollView(this);
+        contentScroll.setFillViewport(false);
+        contentScroll.setVerticalScrollBarEnabled(false);
+        page.addView(contentScroll, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        page.addView(content, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        content.setPadding(0, 0, 0, dp(24));
+        contentScroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView header = label("设置", 26, TEXT, true);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -2043,6 +2050,31 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (playerWebView != null) {
+            playerWebView.onResume();
+            playerWebView.resumeTimers();
+        }
+        if (playerStoppedForBackground && screen == Screen.PLAYER) {
+            playerStoppedForBackground = false;
+            closePlayer();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        pauseActivePlayback();
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        stopActivePlayback();
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
         executor.shutdownNow();
         imageLoader.shutdown();
@@ -2053,6 +2085,34 @@ public class MainActivity extends Activity {
             playerWebView.destroy();
         }
         super.onDestroy();
+    }
+
+    private void pauseActivePlayback() {
+        if (exoPlayer != null) {
+            exoPlayer.pause();
+        }
+        if (playerWebView != null) {
+            playerWebView.onPause();
+            playerWebView.pauseTimers();
+        }
+    }
+
+    private void stopActivePlayback() {
+        boolean wasPlayingScreen = screen == Screen.PLAYER && (exoPlayer != null || playerWebView != null || playerView != null);
+        cleanupResolver();
+        releaseNativePlayer();
+        if (playerWebView != null) {
+            playerWebView.stopLoading();
+            playerWebView.destroy();
+            playerWebView = null;
+        }
+        if (customView != null) {
+            customView = null;
+            customViewCallback = null;
+        }
+        if (wasPlayingScreen) {
+            playerStoppedForBackground = true;
+        }
     }
 
     private final class PlayerChromeClient extends WebChromeClient {
