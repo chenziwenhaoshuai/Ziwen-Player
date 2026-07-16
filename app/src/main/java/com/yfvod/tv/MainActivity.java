@@ -700,6 +700,12 @@ public class MainActivity extends Activity {
         clearParams.topMargin = dp(18);
         content.addView(clear, clearParams);
 
+        TextView clearHistory = button("清除历史浏览记录", false);
+        clearHistory.setOnClickListener(v -> clearRecentWatchHistory());
+        LinearLayout.LayoutParams clearHistoryParams = new LinearLayout.LayoutParams(dp(260), dp(54));
+        clearHistoryParams.topMargin = dp(18);
+        content.addView(clearHistory, clearHistoryParams);
+
         TextView betaMode = button("", false);
         updateBetaModeButton(betaMode);
         betaMode.setOnClickListener(v -> toggleBetaMode(betaMode));
@@ -1653,6 +1659,14 @@ public class MainActivity extends Activity {
             settingsPrefs().edit().putString(PREF_RECENT_WATCHES, array.toString()).apply();
         } catch (Exception ignored) {
         }
+    }
+
+    private void clearRecentWatchHistory() {
+        settingsPrefs().edit()
+                .remove(PREF_RECENT_WATCHES)
+                .remove(PREF_RECENT_WATCHES_LEGACY)
+                .apply();
+        showHint("历史浏览记录已清除");
     }
 
     private static String nullToEmpty(String value) {
