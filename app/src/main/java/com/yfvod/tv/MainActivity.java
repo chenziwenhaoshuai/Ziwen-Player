@@ -18,6 +18,7 @@ import android.text.Html;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -79,6 +80,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -105,6 +107,7 @@ public class MainActivity extends Activity {
     private static final String PEACH_SITE_ID = "2";
     private static final String PEACH_CHANNEL_ID = "522";
     private static final String PEACH_CHANNEL_NAME = "gj-89";
+    private static final int PEACH_RANDOM_PAGE_MAX = 30;
     private static final String PEACH_IMAGE_HOST = "https://hm-img.twmjjy.com";
     private static final String[] PEACH_PLAY_HOSTS = new String[]{
             "https://hm-img.twmjjy.com",
@@ -132,6 +135,7 @@ public class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final SiteClient siteClient = new SiteClient();
     private final ImageLoader imageLoader = new ImageLoader();
+    private final Random random = new Random();
 
     private FrameLayout root;
     private ProgressBar loading;
@@ -170,6 +174,8 @@ public class MainActivity extends Activity {
     private boolean catalogHasMore;
     private boolean catalogPagedMode;
     private String catalogPagingKind = "";
+    private float catalogPullStartY = 0f;
+    private boolean catalogPullTracking = false;
     private List<Episode> currentDetailEpisodes = new ArrayList<>();
     private List<SourceGroup> currentSources = new ArrayList<>();
     private int activeSourcePosition = 0;
@@ -294,6 +300,27 @@ public class MainActivity extends Activity {
                 loadMoreCatalogIfNeeded(firstVisibleItem + visibleItemCount - 1);
             }
         });
+        catalogGrid.setOnTouchListener((view, event) -> {
+            if (!PEACH_PATH.equals(currentPath) || catalogLoadingMore) {
+                return false;
+            }
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                catalogPullTracking = catalogGrid.getFirstVisiblePosition() == 0;
+                catalogPullStartY = event.getY();
+                return false;
+            }
+            if (event.getAction() == MotionEvent.ACTION_MOVE && catalogPullTracking) {
+                if (event.getY() - catalogPullStartY > dp(120)) {
+                    catalogPullTracking = false;
+                    refreshPeachCatalogRandomly();
+                    return true;
+                }
+            }
+            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                catalogPullTracking = false;
+            }
+            return false;
+        });
         content.addView(catalogGrid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         addOverlays();
@@ -352,6 +379,37 @@ public class MainActivity extends Activity {
                 main.post(() -> {
                     catalogLoadingMore = false;
                     setLoading(false, "加载更多失败：" + e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void refreshPeachCatalogRandomly() {
+        if (!PEACH_PATH.equals(currentPath) || videoAdapter == null || catalogLoadingMore) {
+            return;
+        }
+        int page = 1 + random.nextInt(PEACH_RANDOM_PAGE_MAX);
+        catalogLoadingMore = true;
+        setLoading(true, "正在随机换一批...");
+        executor.execute(() -> {
+            try {
+                List<VideoItem> videos = siteClient.fetchCatalog(pagedCatalogPath("peach", page));
+                main.post(() -> {
+                    catalogLoadingMore = false;
+                    setLoading(false, videos.isEmpty() ? "这一批没有内容" : "");
+                    if (videos.isEmpty()) {
+                        return;
+                    }
+                    catalogPage = page;
+                    catalogHasMore = true;
+                    videoAdapter.setItems(videos);
+                    catalogGrid.requestFocus();
+                    catalogGrid.setSelection(0);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    catalogLoadingMore = false;
+                    setLoading(false, "随机刷新失败：" + e.getMessage());
                 });
             }
         });
@@ -2958,7 +3016,19 @@ public class MainActivity extends Activity {
                     out.add(new VideoItem(title, PEACH_PATH + "/detail/" + id, poster, meta, "peach", id, playUrl));
                 }
             }
+            Collections.sort(out, (a, b) -> peachPubdate(b).compareTo(peachPubdate(a)));
             return out;
+        }
+
+        private static String peachPubdate(VideoItem item) {
+            if (item == null || item.remarks == null || item.remarks.isEmpty()) {
+                return "";
+            }
+            Matcher matcher = Pattern.compile("\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{8}").matcher(item.remarks);
+            if (matcher.find()) {
+                return matcher.group().replace("/", "-");
+            }
+            return item.remarks;
         }
 
         private VideoDetail fetchPeachDetail(VideoItem item) throws Exception {
