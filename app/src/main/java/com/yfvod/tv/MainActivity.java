@@ -1,6 +1,7 @@
 package com.yfvod.tv;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -1377,8 +1378,7 @@ public class MainActivity extends Activity {
                         }
                         return;
                     }
-                    showHint("发现新版本 " + info.versionName + "，开始下载");
-                    downloadUpdate(info);
+                    showUpdatePrompt(info);
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -1390,6 +1390,29 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void showUpdatePrompt(UpdateInfo info) {
+        if (info == null || info.apkUrl.isEmpty() || isFinishing()) {
+            return;
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("发现新版本")
+                .setMessage("当前版本：" + currentVersionName()
+                        + "\n最新版本：" + info.versionName
+                        + "\n\n是否立即下载并安装更新？")
+                .setPositiveButton("立即更新", (ignored, which) -> downloadUpdate(info))
+                .setNegativeButton("稍后", null)
+                .create();
+        dialog.setOnShowListener(ignored -> {
+            TextView updateButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            TextView laterButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            updateButton.setTextColor(ACCENT);
+            laterButton.setTextColor(TEXT);
+            updateButton.requestFocus();
+        });
+        dialog.setOnDismissListener(ignored -> keepScreenImmersive());
+        dialog.show();
     }
 
     private UpdateInfo fetchLatestUpdate() throws Exception {
