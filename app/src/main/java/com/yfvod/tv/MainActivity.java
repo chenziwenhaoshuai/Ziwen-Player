@@ -2276,6 +2276,18 @@ public class MainActivity extends Activity {
                 return true;
             }
             if ((screen == Screen.CATALOG || screen == Screen.SEARCH) && catalogGrid != null) {
+                if (key == KeyEvent.KEYCODE_DPAD_UP
+                        && screen == Screen.CATALOG
+                        && PEACH_PATH.equals(currentPath)
+                        && catalogGrid.hasFocus()) {
+                    int position = catalogGrid.getSelectedItemPosition();
+                    boolean firstRowSelected = position != AdapterView.INVALID_POSITION
+                            && position < catalogGrid.getNumColumns();
+                    if (firstRowSelected && catalogGrid.getFirstVisiblePosition() == 0) {
+                        refreshPeachCatalogRandomly();
+                        return true;
+                    }
+                }
                 if (key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER) {
                     if (catalogGrid.hasFocus()) {
                         int position = catalogGrid.getSelectedItemPosition();
