@@ -124,7 +124,8 @@ public class MainActivity extends Activity {
             "https://hm-img.aa66cc.live"
     };
     private static final String PEACH_FERNET_KEY = "NyGRG56A8i5J2JMqh7da83r2MMfgbM7Ppw1aCF8YnAY=";
-    private static final String UPDATE_API_URL = "https://api.github.com/repos/chenziwenhaoshuai/Ziwen-Player/releases/latest";
+    private static final String GITHUB_UPDATE_API_URL = "https://api.github.com/repos/chenziwenhaoshuai/Ziwen-Player/releases/latest";
+    private static final String GITEE_UPDATE_API_URL = "https://gitee.com/api/v5/repos/chenziwenhaoshuai/Ziwen-Player/releases/latest";
     private static final String UPDATE_APK_PREFIX = "Ziwen-Player-v";
     private static final String UPDATE_APK_SUFFIX = ".apk";
     private static final long VIDEO_CACHE_MAX_BYTES = 1024L * 1024L * 1024L;
@@ -787,11 +788,22 @@ public class MainActivity extends Activity {
         versionParams.topMargin = dp(16);
         content.addView(versionInfo, versionParams);
 
-        TextView checkUpdate = button("检查更新", false);
-        checkUpdate.setOnClickListener(v -> checkForUpdates(false));
-        LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(dp(220), dp(54));
-        updateParams.topMargin = dp(10);
-        content.addView(checkUpdate, updateParams);
+        LinearLayout updateRow = new LinearLayout(this);
+        updateRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams updateRowParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
+        updateRowParams.topMargin = dp(10);
+        content.addView(updateRow, updateRowParams);
+
+        TextView checkGithubUpdate = button("GitHub 更新", false);
+        checkGithubUpdate.setOnClickListener(v -> checkForUpdates(false, UpdateSource.GITHUB));
+        LinearLayout.LayoutParams githubUpdateParams = new LinearLayout.LayoutParams(dp(220), ViewGroup.LayoutParams.MATCH_PARENT);
+        updateRow.addView(checkGithubUpdate, githubUpdateParams);
+
+        TextView checkGiteeUpdate = button("Gitee 更新", false);
+        checkGiteeUpdate.setOnClickListener(v -> checkForUpdates(false, UpdateSource.GITEE));
+        LinearLayout.LayoutParams giteeUpdateParams = new LinearLayout.LayoutParams(dp(220), ViewGroup.LayoutParams.MATCH_PARENT);
+        giteeUpdateParams.leftMargin = dp(14);
+        updateRow.addView(checkGiteeUpdate, giteeUpdateParams);
 
         TextView autoUpdate = button("", false);
         updateAutoUpdateButton(autoUpdate);
@@ -1354,10 +1366,10 @@ public class MainActivity extends Activity {
             return;
         }
         settingsPrefs().edit().putLong(PREF_LAST_AUTO_UPDATE_CHECK, now).apply();
-        main.postDelayed(() -> checkForUpdates(true), 1800);
+        main.postDelayed(() -> checkForUpdates(true, UpdateSource.GITHUB), 1800);
     }
 
-    private void checkForUpdates(boolean automatic) {
+    private void checkForUpdates(boolean automatic, UpdateSource source) {
         if (updateChecking || updateDownloading) {
             if (!automatic) {
                 showHint("正在检查或下载更新");
@@ -1366,23 +1378,23 @@ public class MainActivity extends Activity {
         }
         updateChecking = true;
         if (!automatic) {
-            setLoading(true, "正在检查更新...");
+            setLoading(true, "正在从 " + source.displayName + " 检查更新...");
         }
         executor.execute(() -> {
             try {
-                UpdateInfo info = fetchLatestUpdate();
+                UpdateInfo info = fetchLatestUpdate(source);
                 main.post(() -> {
                     updateChecking = false;
                     setLoading(false, "");
                     if (info == null || info.apkUrl.isEmpty()) {
                         if (!automatic) {
-                            showHint("没有找到可安装的 APK");
+                            showHint(source.displayName + " 没有找到可安装的 APK");
                         }
                         return;
                     }
                     if (compareVersionNames(info.versionName, currentVersionName()) <= 0) {
                         if (!automatic) {
-                            showHint("已是最新版本：" + currentVersionName());
+                            showHint(source.displayName + " 已是最新版本：" + currentVersionName());
                         }
                         return;
                     }
@@ -1393,7 +1405,7 @@ public class MainActivity extends Activity {
                     updateChecking = false;
                     setLoading(false, "");
                     if (!automatic) {
-                        showHint("检查更新失败：" + e.getMessage());
+                        showHint(source.displayName + " 检查更新失败：" + e.getMessage());
                     }
                 });
             }
@@ -1408,6 +1420,7 @@ public class MainActivity extends Activity {
                 .setTitle("发现新版本")
                 .setMessage("当前版本：" + currentVersionName()
                         + "\n最新版本：" + info.versionName
+                        + "\n更新来源：" + info.sourceName
                         + "\n\n是否立即下载并安装更新？")
                 .setPositiveButton("立即更新", (ignored, which) -> downloadUpdate(info))
                 .setNegativeButton("稍后", null)
@@ -1423,8 +1436,8 @@ public class MainActivity extends Activity {
         dialog.show();
     }
 
-    private UpdateInfo fetchLatestUpdate() throws Exception {
-        String raw = readUpdateTextWithRetry(UPDATE_API_URL);
+    private UpdateInfo fetchLatestUpdate(UpdateSource source) throws Exception {
+        String raw = readUpdateTextWithRetry(source.apiUrl);
         JSONObject release = new JSONObject(raw);
         String tag = release.optString("tag_name", "");
         String versionName = normalizeVersionName(tag);
@@ -1442,11 +1455,14 @@ public class MainActivity extends Activity {
                 if (name.startsWith(UPDATE_APK_PREFIX) && name.endsWith(UPDATE_APK_SUFFIX)) {
                     apkName = name;
                     apkUrl = asset.optString("browser_download_url", "");
+                    if (apkUrl.isEmpty()) {
+                        apkUrl = asset.optString("download_url", "");
+                    }
                     break;
                 }
             }
         }
-        return new UpdateInfo(versionName, versionCode, apkName, apkUrl);
+        return new UpdateInfo(versionName, versionCode, apkName, apkUrl, source.displayName);
     }
 
     private static String readUpdateTextWithRetry(String url) throws Exception {
@@ -3431,12 +3447,27 @@ public class MainActivity extends Activity {
         final int versionCode;
         final String apkName;
         final String apkUrl;
+        final String sourceName;
 
-        UpdateInfo(String versionName, int versionCode, String apkName, String apkUrl) {
+        UpdateInfo(String versionName, int versionCode, String apkName, String apkUrl, String sourceName) {
             this.versionName = versionName == null ? "" : versionName;
             this.versionCode = versionCode;
             this.apkName = apkName == null ? "" : apkName;
             this.apkUrl = apkUrl == null ? "" : apkUrl;
+            this.sourceName = sourceName == null ? "" : sourceName;
+        }
+    }
+
+    private enum UpdateSource {
+        GITHUB("GitHub", GITHUB_UPDATE_API_URL),
+        GITEE("Gitee", GITEE_UPDATE_API_URL);
+
+        final String displayName;
+        final String apiUrl;
+
+        UpdateSource(String displayName, String apiUrl) {
+            this.displayName = displayName;
+            this.apiUrl = apiUrl;
         }
     }
 
