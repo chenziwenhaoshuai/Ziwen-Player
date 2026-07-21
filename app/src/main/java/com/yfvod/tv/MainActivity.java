@@ -3242,7 +3242,10 @@ public class MainActivity extends Activity {
             if (text == null) {
                 return "";
             }
-            return Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY).toString();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                return Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY).toString();
+            }
+            return Html.fromHtml(text).toString();
         }
 
         private static int parseInt(String value) {
