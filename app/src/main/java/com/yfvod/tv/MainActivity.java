@@ -50,6 +50,12 @@ import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
@@ -74,6 +80,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -2862,7 +2870,7 @@ public class MainActivity extends Activity {
                 String dataUrl = decodeEncryptedImage(url);
                 return decodeDataUrl(dataUrl);
             }
-            HttpURLConnection connection = openConnection(url);
+            HttpURLConnection connection = openImageConnection(url);
             try (InputStream input = connection.getInputStream()) {
                 return BitmapFactory.decodeStream(input);
             } finally {
@@ -3264,6 +3272,58 @@ public class MainActivity extends Activity {
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android TV) AppleWebKit/537.36 YfVodTVNative/1.0");
         connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml,image/avif,image/webp,image/*,*/*;q=0.8");
         return connection;
+    }
+
+    private static HttpURLConnection openImageConnection(String url) throws Exception {
+        HttpURLConnection connection = openImageConnection(url, false);
+        try {
+            connection.getResponseCode();
+            return connection;
+        } catch (SSLHandshakeException e) {
+            connection.disconnect();
+            return openImageConnection(url, true);
+        }
+    }
+
+    private static HttpURLConnection openImageConnection(String url, boolean trustAll) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setConnectTimeout(6000);
+        connection.setReadTimeout(8000);
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android TV) AppleWebKit/537.36 YfVodTVNative/1.0");
+        connection.setRequestProperty("Accept", "image/jpeg,image/png,image/webp,image/*,*/*;q=0.8");
+        connection.setRequestProperty("Referer", BASE_URL + "/");
+        if (trustAll && connection instanceof HttpsURLConnection) {
+            HttpsURLConnection https = (HttpsURLConnection) connection;
+            https.setSSLSocketFactory(trustAllSslContext().getSocketFactory());
+            https.setHostnameVerifier(trustAllHostnameVerifier());
+        }
+        return connection;
+    }
+
+    private static SSLContext trustAllSslContext() throws Exception {
+        TrustManager[] trustManagers = new TrustManager[]{
+                new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                    }
+
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+                }
+        };
+        SSLContext context = SSLContext.getInstance("TLS");
+        context.init(null, trustManagers, new SecureRandom());
+        return context;
+    }
+
+    private static HostnameVerifier trustAllHostnameVerifier() {
+        return (hostname, session) -> true;
     }
 
     private static String decodeEncryptedImage(String url) throws Exception {
