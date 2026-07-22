@@ -3164,18 +3164,7 @@ public class MainActivity extends Activity {
         }
 
         private static String fetch(String url, String referer) throws Exception {
-            HttpURLConnection connection = openConnection(url);
-            connection.setRequestProperty("Referer", referer);
-            StringBuilder builder = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    builder.append(line).append('\n');
-                }
-            } finally {
-                connection.disconnect();
-            }
-            return builder.toString();
+            return readConnectionText(url, referer, true);
         }
 
         private static String attr(String tag, String name) {
@@ -3282,12 +3271,38 @@ public class MainActivity extends Activity {
     }
 
     private static HttpURLConnection openConnection(String url) throws Exception {
+        return openConnection(url, false);
+    }
+
+    private static HttpURLConnection openConnection(String url, boolean trustAll) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(6000);
         connection.setReadTimeout(8000);
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android TV) AppleWebKit/537.36 YfVodTVNative/1.0");
         connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml,image/avif,image/webp,image/*,*/*;q=0.8");
+        if (trustAll && connection instanceof HttpsURLConnection) {
+            HttpsURLConnection https = (HttpsURLConnection) connection;
+            https.setSSLSocketFactory(trustAllSslContext().getSocketFactory());
+            https.setHostnameVerifier(trustAllHostnameVerifier());
+        }
         return connection;
+    }
+
+    private static void applyReferer(HttpURLConnection connection, String referer) {
+        if (connection != null && referer != null && !referer.isEmpty()) {
+            connection.setRequestProperty("Referer", referer);
+        }
+    }
+
+    private static boolean isPeachCompatUrl(String url) {
+        if (url == null) {
+            return false;
+        }
+        String lower = url.toLowerCase(Locale.ROOT);
+        return lower.startsWith(PEACH_API_BASE.toLowerCase(Locale.ROOT))
+                || lower.contains("://hm-img.twmjjy.com/")
+                || lower.contains("://hm-vip.twmjjy.com/")
+                || lower.contains("://hm-img.aa66cc.live/");
     }
 
     private static HttpURLConnection openImageConnection(String url) throws Exception {
@@ -3365,15 +3380,31 @@ public class MainActivity extends Activity {
     }
 
     private static String readText(String url, String referer) throws Exception {
-        HttpURLConnection connection = openConnection(url);
-        if (referer != null && !referer.isEmpty()) {
-            connection.setRequestProperty("Referer", referer);
+        return readConnectionText(url, referer, false);
+    }
+
+    private static String readConnectionText(String url, String referer, boolean keepLineBreaks) throws Exception {
+        try {
+            return readConnectionText(url, referer, keepLineBreaks, false);
+        } catch (SSLHandshakeException e) {
+            if (!isPeachCompatUrl(url)) {
+                throw e;
+            }
+            return readConnectionText(url, referer, keepLineBreaks, true);
         }
+    }
+
+    private static String readConnectionText(String url, String referer, boolean keepLineBreaks, boolean trustAll) throws Exception {
+        HttpURLConnection connection = openConnection(url, trustAll);
+        applyReferer(connection, referer);
         StringBuilder builder = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 builder.append(line);
+                if (keepLineBreaks) {
+                    builder.append('\n');
+                }
             }
         } finally {
             connection.disconnect();
