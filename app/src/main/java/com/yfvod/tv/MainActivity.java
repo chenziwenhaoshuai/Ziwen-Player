@@ -140,12 +140,24 @@ public class MainActivity extends Activity {
     private static final int DEFAULT_PRELOAD_MINUTES = 3;
     private static final int[] PRELOAD_MINUTE_OPTIONS = new int[]{1, 2, 3, 5, 8};
     private static final int RECENT_WATCH_LIMIT = 40;
+    private static final long RECENT_PROGRESS_SAVE_INTERVAL_MS = 15_000L;
+    private static final long RESUME_MIN_POSITION_MS = 10_000L;
+    private static final long WATCH_FINISHED_THRESHOLD_MS = 30_000L;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final SiteClient siteClient = new SiteClient();
     private final ImageLoader imageLoader = new ImageLoader();
     private final Random random = new Random();
+    private final Runnable playbackProgressSaver = new Runnable() {
+        @Override
+        public void run() {
+            if (screen == Screen.PLAYER && exoPlayer != null) {
+                saveRecentWatch();
+                main.postDelayed(this, RECENT_PROGRESS_SAVE_INTERVAL_MS);
+            }
+        }
+    };
 
     private FrameLayout root;
     private ProgressBar loading;
@@ -173,6 +185,7 @@ public class MainActivity extends Activity {
     private boolean playerStoppedForBackground;
     private boolean updateChecking;
     private boolean updateDownloading;
+    private long pendingResumePositionMs = 0L;
     private String updateDownloadVersion = "";
     private File updateDownloadFile;
 
@@ -944,10 +957,62 @@ public class MainActivity extends Activity {
         addOverlays();
         setLoading(false, detail.episodes.isEmpty() ? "没有解析到剧集" : "");
         if (!detail.episodes.isEmpty()) {
-            selectSource(0);
-            sourceScroll.requestFocus();
-            refreshSourceRow();
+            restoreRecentEpisodeSelection();
         }
+    }
+
+    private void restoreRecentEpisodeSelection() {
+        RecentEpisodeSelection selection = findRecentEpisodeSelection();
+        selectSource(selection.sourcePosition);
+        if (episodeGrid != null && episodeAdapter != null && episodeAdapter.getCount() > 0) {
+            int episodePosition = Math.max(0, Math.min(selection.episodePosition, episodeAdapter.getCount() - 1));
+            episodeAdapter.forceSelectedPosition(episodePosition);
+            episodeGrid.setSelection(episodePosition);
+        }
+        if (selection.hasResumeProgress()) {
+            showHint("上次看到 " + formatTime(selection.positionMs));
+        }
+        if (selection.hasEpisodeSelection() && episodeGrid != null) {
+            episodeGrid.requestFocus();
+        } else {
+            sourceScroll.requestFocus();
+        }
+        refreshSourceRow();
+    }
+
+    private RecentEpisodeSelection findRecentEpisodeSelection() {
+        VideoItem item = currentVideo;
+        if (item == null || item.episodeIndex <= 0 || currentSources.isEmpty()) {
+            return new RecentEpisodeSelection(0, 0, 0L, false);
+        }
+        int fallbackSource = 0;
+        int fallbackEpisode = 0;
+        boolean matched = false;
+        long resumePosition = normalizedRecentPosition(item.positionMs, item.durationMs);
+        for (int sourceIndex = 0; sourceIndex < currentSources.size(); sourceIndex++) {
+            SourceGroup source = currentSources.get(sourceIndex);
+            for (int episodeIndex = 0; episodeIndex < source.episodes.size(); episodeIndex++) {
+                Episode episode = source.episodes.get(episodeIndex);
+                if (episode.index != item.episodeIndex) {
+                    continue;
+                }
+                if (episode.path.equals(item.episodePath)) {
+                    return new RecentEpisodeSelection(sourceIndex, episodeIndex, resumePosition, true);
+                }
+                if (!matched) {
+                    fallbackSource = sourceIndex;
+                    fallbackEpisode = episodeIndex;
+                    matched = true;
+                }
+                if (episode.source == item.episodeSource
+                        || (!item.episodeSourceName.isEmpty() && episode.sourceName.equals(item.episodeSourceName))
+                        || (!item.episodeFrom.isEmpty() && episode.from.equals(item.episodeFrom))) {
+                    fallbackSource = sourceIndex;
+                    fallbackEpisode = episodeIndex;
+                }
+            }
+        }
+        return new RecentEpisodeSelection(fallbackSource, fallbackEpisode, matched ? resumePosition : 0L, matched);
     }
 
     private List<SourceGroup> buildSourceGroups(List<Episode> episodes) {
@@ -1043,6 +1108,7 @@ public class MainActivity extends Activity {
             return;
         }
         pendingEpisode = episode;
+        pendingResumePositionMs = resumePositionForEpisode(episode);
         List<Episode> candidates = playbackCandidates(episode);
         setLoading(true, "正在解析播放地址...");
         executor.execute(() -> {
@@ -1055,6 +1121,7 @@ public class MainActivity extends Activity {
                         Episode resolvedEpisode = candidate;
                         main.post(() -> {
                             pendingEpisode = resolvedEpisode;
+                            pendingResumePositionMs = resumePositionForEpisode(resolvedEpisode);
                             setLoading(false, "");
                             showVideoPlayer(target);
                         });
@@ -1071,6 +1138,7 @@ public class MainActivity extends Activity {
             Episode resolvedEpisode = fallbackEpisode;
             main.post(() -> {
                 pendingEpisode = resolvedEpisode;
+                pendingResumePositionMs = resumePositionForEpisode(resolvedEpisode);
                 setLoading(false, "正在尝试捕获 m3u8");
                 captureM3u8WithWebView(target);
             });
@@ -1106,6 +1174,20 @@ public class MainActivity extends Activity {
             return Integer.compare(a.source, b.source);
         });
         return candidates;
+    }
+
+    private long resumePositionForEpisode(Episode episode) {
+        if (currentVideo == null || episode == null || currentVideo.episodeIndex <= 0) {
+            return 0L;
+        }
+        if (episode.index != currentVideo.episodeIndex) {
+            return 0L;
+        }
+        boolean sameEpisode = episode.path.equals(currentVideo.episodePath)
+                || episode.source == currentVideo.episodeSource
+                || (!currentVideo.episodeSourceName.isEmpty() && episode.sourceName.equals(currentVideo.episodeSourceName))
+                || (!currentVideo.episodeFrom.isEmpty() && episode.from.equals(currentVideo.episodeFrom));
+        return sameEpisode ? normalizedRecentPosition(currentVideo.positionMs, currentVideo.durationMs) : 0L;
     }
 
     private static int selectedCandidateCompare(Episode a, Episode b, Episode selected) {
@@ -1233,7 +1315,13 @@ public class MainActivity extends Activity {
             showHint("正在播放：" + target.title);
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(target.directUrl)));
             exoPlayer.prepare();
+            if (pendingResumePositionMs > 0) {
+                exoPlayer.seekTo(pendingResumePositionMs);
+                showHint("从 " + formatTime(pendingResumePositionMs) + " 继续播放");
+            }
             exoPlayer.play();
+            main.removeCallbacks(playbackProgressSaver);
+            main.postDelayed(playbackProgressSaver, RECENT_PROGRESS_SAVE_INTERVAL_MS);
             playerView.requestFocus();
         } catch (Exception e) {
             showHint("播放器启动失败，请换一条线路");
@@ -1243,6 +1331,10 @@ public class MainActivity extends Activity {
     }
 
     private void releaseNativePlayer() {
+        main.removeCallbacks(playbackProgressSaver);
+        if (exoPlayer != null) {
+            saveRecentWatch();
+        }
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;
@@ -1719,11 +1811,22 @@ public class MainActivity extends Activity {
                 String provider = object.optString("provider", url.startsWith(PEACH_PATH) ? "peach" : "");
                 String remoteId = object.optString("remoteId", url.startsWith(PEACH_PATH + "/detail/") ? url.substring((PEACH_PATH + "/detail/").length()) : "");
                 String playUrl = object.optString("playUrl", "");
+                String episodeTitle = object.optString("episodeTitle", "");
+                String episodePath = object.optString("episodePath", "");
+                int episodeSource = object.optInt("episodeSource", 0);
+                int episodeIndex = object.optInt("episodeIndex", 0);
+                String episodeFrom = object.optString("episodeFrom", "");
+                String episodeSourceName = object.optString("episodeSourceName", "");
+                long positionMs = Math.max(0L, object.optLong("positionMs", 0L));
+                long durationMs = Math.max(0L, object.optLong("durationMs", 0L));
+                long updatedAt = Math.max(0L, object.optLong("updatedAt", 0L));
                 if (url.startsWith(PEACH_PATH) && !isBetaModeEnabled()) {
                     continue;
                 }
                 if (!title.isEmpty() && !url.isEmpty()) {
-                    items.add(new VideoItem(title, url, poster, remarks, provider, remoteId, playUrl));
+                    items.add(new VideoItem(title, url, poster, remarks, provider, remoteId, playUrl,
+                            episodeTitle, episodePath, episodeSource, episodeIndex, episodeFrom, episodeSourceName,
+                            positionMs, durationMs, updatedAt));
                 }
             }
         } catch (Exception ignored) {
@@ -1737,10 +1840,12 @@ public class MainActivity extends Activity {
         if (currentVideo == null || currentVideo.url == null || currentVideo.url.isEmpty()) {
             return;
         }
+        VideoItem recentVideo = currentVideo.withProgress(pendingEpisode, currentPlaybackPositionMs(), currentPlaybackDurationMs());
+        currentVideo = recentVideo;
         ArrayList<VideoItem> items = new ArrayList<>();
-        items.add(currentVideo);
+        items.add(recentVideo);
         for (VideoItem item : loadRecentWatches()) {
-            if (item == null || item.url == null || item.url.equals(currentVideo.url)) {
+            if (item == null || item.url == null || item.url.equals(recentVideo.url)) {
                 continue;
             }
             items.add(item);
@@ -1759,11 +1864,43 @@ public class MainActivity extends Activity {
                 object.put("provider", nullToEmpty(item.provider));
                 object.put("remoteId", nullToEmpty(item.remoteId));
                 object.put("playUrl", nullToEmpty(item.playUrl));
+                object.put("episodeTitle", nullToEmpty(item.episodeTitle));
+                object.put("episodePath", nullToEmpty(item.episodePath));
+                object.put("episodeSource", item.episodeSource);
+                object.put("episodeIndex", item.episodeIndex);
+                object.put("episodeFrom", nullToEmpty(item.episodeFrom));
+                object.put("episodeSourceName", nullToEmpty(item.episodeSourceName));
+                object.put("positionMs", item.positionMs);
+                object.put("durationMs", item.durationMs);
+                object.put("updatedAt", item.updatedAt);
                 array.put(object);
             }
             settingsPrefs().edit().putString(PREF_RECENT_WATCHES, array.toString()).apply();
         } catch (Exception ignored) {
         }
+    }
+
+    private long currentPlaybackPositionMs() {
+        return exoPlayer == null ? 0L : Math.max(0L, exoPlayer.getCurrentPosition());
+    }
+
+    private long currentPlaybackDurationMs() {
+        if (exoPlayer == null) {
+            return 0L;
+        }
+        long duration = exoPlayer.getDuration();
+        return duration > 0 ? duration : 0L;
+    }
+
+    private static long normalizedRecentPosition(long positionMs, long durationMs) {
+        long position = Math.max(0L, positionMs);
+        if (durationMs > 0) {
+            position = Math.min(position, durationMs);
+            if (durationMs - position <= WATCH_FINISHED_THRESHOLD_MS) {
+                return 0L;
+            }
+        }
+        return position < RESUME_MIN_POSITION_MS ? 0L : position;
     }
 
     private void clearRecentWatchHistory() {
@@ -2529,6 +2666,9 @@ public class MainActivity extends Activity {
     }
 
     private void closePlayer() {
+        if (exoPlayer != null) {
+            saveRecentWatch();
+        }
         cleanupResolver();
         if (playerWebView != null) {
             playerWebView.destroy();
@@ -2600,6 +2740,7 @@ public class MainActivity extends Activity {
 
     private void pauseActivePlayback() {
         if (exoPlayer != null) {
+            saveRecentWatch();
             exoPlayer.pause();
         }
         if (playerWebView != null) {
@@ -2610,6 +2751,9 @@ public class MainActivity extends Activity {
 
     private void stopActivePlayback() {
         boolean wasPlayingScreen = screen == Screen.PLAYER && (exoPlayer != null || playerWebView != null || playerView != null);
+        if (exoPlayer != null) {
+            saveRecentWatch();
+        }
         cleanupResolver();
         releaseNativePlayer();
         if (playerWebView != null) {
@@ -2776,7 +2920,7 @@ public class MainActivity extends Activity {
             }
             title.setText(item.title);
             title.setTextColor(selected ? Color.BLACK : TEXT);
-            meta.setText(item.remarks);
+            meta.setText(item.displayMeta());
             meta.setTextColor(selected ? Color.BLACK : MUTED);
             setBackgroundColor(selected ? ACCENT : PANEL);
             imageLoader.load(item.poster, poster);
@@ -3510,12 +3654,27 @@ public class MainActivity extends Activity {
         final String provider;
         final String remoteId;
         final String playUrl;
+        final String episodeTitle;
+        final String episodePath;
+        final int episodeSource;
+        final int episodeIndex;
+        final String episodeFrom;
+        final String episodeSourceName;
+        final long positionMs;
+        final long durationMs;
+        final long updatedAt;
 
         VideoItem(String title, String url, String poster, String remarks) {
             this(title, url, poster, remarks, "", "", "");
         }
 
         VideoItem(String title, String url, String poster, String remarks, String provider, String remoteId, String playUrl) {
+            this(title, url, poster, remarks, provider, remoteId, playUrl, "", "", 0, 0, "", "", 0L, 0L, 0L);
+        }
+
+        VideoItem(String title, String url, String poster, String remarks, String provider, String remoteId, String playUrl,
+                  String episodeTitle, String episodePath, int episodeSource, int episodeIndex, String episodeFrom,
+                  String episodeSourceName, long positionMs, long durationMs, long updatedAt) {
             this.title = title;
             this.url = url;
             this.poster = poster;
@@ -3523,10 +3682,47 @@ public class MainActivity extends Activity {
             this.provider = provider == null ? "" : provider;
             this.remoteId = remoteId == null ? "" : remoteId;
             this.playUrl = playUrl == null ? "" : playUrl;
+            this.episodeTitle = episodeTitle == null ? "" : episodeTitle;
+            this.episodePath = episodePath == null ? "" : episodePath;
+            this.episodeSource = episodeSource;
+            this.episodeIndex = episodeIndex;
+            this.episodeFrom = episodeFrom == null ? "" : episodeFrom;
+            this.episodeSourceName = episodeSourceName == null ? "" : episodeSourceName;
+            this.positionMs = Math.max(0L, positionMs);
+            this.durationMs = Math.max(0L, durationMs);
+            this.updatedAt = Math.max(0L, updatedAt);
         }
 
         boolean isPeach() {
             return "peach".equals(provider);
+        }
+
+        String displayMeta() {
+            if (episodeIndex > 0) {
+                StringBuilder builder = new StringBuilder();
+                builder.append(episodeTitle.isEmpty() ? "第" + episodeIndex + "集" : episodeTitle);
+                if (positionMs > 0) {
+                    builder.append("  ").append(formatTime(positionMs));
+                }
+                if (remarks != null && !remarks.isEmpty()) {
+                    builder.append("  ").append(remarks);
+                }
+                return builder.toString();
+            }
+            return remarks;
+        }
+
+        VideoItem withProgress(Episode episode, long positionMs, long durationMs) {
+            long safeDuration = Math.max(0L, durationMs);
+            long safePosition = normalizedRecentPosition(positionMs, safeDuration);
+            return new VideoItem(title, url, poster, remarks, provider, remoteId, playUrl,
+                    episode == null ? episodeTitle : episode.title,
+                    episode == null ? episodePath : episode.path,
+                    episode == null ? episodeSource : episode.source,
+                    episode == null ? episodeIndex : episode.index,
+                    episode == null ? episodeFrom : episode.from,
+                    episode == null ? episodeSourceName : episode.sourceName,
+                    safePosition, safeDuration, System.currentTimeMillis());
         }
     }
 
@@ -3564,6 +3760,28 @@ public class MainActivity extends Activity {
                 return 5;
             }
             return 2;
+        }
+    }
+
+    private static final class RecentEpisodeSelection {
+        final int sourcePosition;
+        final int episodePosition;
+        final long positionMs;
+        final boolean episodeSelected;
+
+        RecentEpisodeSelection(int sourcePosition, int episodePosition, long positionMs, boolean episodeSelected) {
+            this.sourcePosition = sourcePosition;
+            this.episodePosition = episodePosition;
+            this.positionMs = positionMs;
+            this.episodeSelected = episodeSelected;
+        }
+
+        boolean hasEpisodeSelection() {
+            return episodeSelected;
+        }
+
+        boolean hasResumeProgress() {
+            return episodeSelected && positionMs > 0;
         }
     }
 
