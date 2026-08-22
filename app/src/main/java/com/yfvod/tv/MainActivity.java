@@ -1396,7 +1396,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean isBetaModeEnabled() {
-        return settingsPrefs().getBoolean(PREF_BETA_MODE, true);
+        return settingsPrefs().getBoolean(PREF_BETA_MODE, false);
     }
 
     private List<Category> visibleCategories() {
