@@ -25,7 +25,10 @@ final class ImageCache {
 
     func image(for url: String) async -> UIImage? {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        if trimmed.isEmpty {
+            NSLog("[ZWImage] 空地址")
+            return nil
+        }
         if let cached = cache.object(forKey: trimmed as NSString) { return cached }
         if let task = running[trimmed] { return await task.value }
 
@@ -49,6 +52,7 @@ final class ImageCache {
                 return try Self.decodeEncryptedImage(text)
             }
             let data = try await fetchData(url)
+            NSLog("[ZWImage] 下载成功 %@ (%d bytes)", url, data.count)
             guard let image = UIImage(data: data) else {
                 NSLog("[ZWImage] 解码失败 %@ (%d bytes)", url, data.count)
                 return nil

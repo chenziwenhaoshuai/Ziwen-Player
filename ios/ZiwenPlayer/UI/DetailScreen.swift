@@ -22,6 +22,7 @@ struct DetailScreen: View {
                         if engine.isActive {
                             InlinePlayerContainer(engine: engine, onFullscreenChange: { fullscreen in
                                 isFullscreen = fullscreen
+                                engine.handleFullscreen(fullscreen)
                             }) {
                                 engine.finish()
                             }

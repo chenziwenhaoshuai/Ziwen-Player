@@ -18,6 +18,18 @@ final class PlaybackEngine: ObservableObject {
 
     private var ticker: Task<Void, Never>?
     private var lastSaved = Date.distantPast
+    private var wasPlayingBeforeFullscreen = false
+
+    /// AVKit 在进出全屏时可能自动暂停，按"进全屏前是否在播"决定是否恢复
+    func handleFullscreen(_ active: Bool) {
+        if active {
+            wasPlayingBeforeFullscreen = player.timeControlStatus == .playing
+            NSLog("[ZWPlayer] 进入全屏，之前是否在播: %@", wasPlayingBeforeFullscreen ? "是" : "否")
+        } else if wasPlayingBeforeFullscreen {
+            player.play()
+            NSLog("[ZWPlayer] 退出全屏，恢复播放")
+        }
+    }
 
     var isActive: Bool { episode != nil }
 
