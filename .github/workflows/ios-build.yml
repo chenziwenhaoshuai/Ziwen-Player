@@ -1,0 +1,86 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          echo "== 已安装的 Xcode =="
+          ls -d /Applications/Xcode*.app || true
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "选中: $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: |
+          cd ios
+          xcodegen generate
+          ls -d ZiwenPlayer.xcodeproj
+
+      - name: Build (unsigned, iphoneos)
+        run: |
+          set -o pipefail
+          cd ios
+          xcodebuild \
+            -project ZiwenPlayer.xcodeproj \
+            -scheme ZiwenPlayer \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ../build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee ../build.log | tail -n 100
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/ZiwenPlayer.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::构建产物不存在: $APP"
+            ls -R build | head -60
+            exit 1
+          fi
+          rm -rf Payload ZiwenPlayer-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry ZiwenPlayer-unsigned.ipa Payload
+          ls -lh ZiwenPlayer-unsigned.ipa
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" || true
+          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist" || true
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZiwenPlayer-unsigned-ipa
+          path: ZiwenPlayer-unsigned.ipa
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7

@@ -1,0 +1,46 @@
+name: ZiwenPlayer
+options:
+  bundleIdPrefix: local.zw
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  ZiwenPlayer:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: ZiwenPlayer
+        excludes:
+          - "Info.plist"
+    settings:
+      base:
+        INFOPLIST_FILE: ZiwenPlayer/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        PRODUCT_BUNDLE_IDENTIFIER: local.zw.player
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
+
+schemes:
+  ZiwenPlayer:
+    build:
+      targets:
+        ZiwenPlayer: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
