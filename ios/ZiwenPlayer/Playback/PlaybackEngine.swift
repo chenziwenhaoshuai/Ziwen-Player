@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import OSLog
 
 /// 页内播放引擎：详情页顶部的播放器，支持原生全屏（AVPlayerViewController 的展开按钮）。
 @MainActor
@@ -19,15 +20,16 @@ final class PlaybackEngine: ObservableObject {
     private var ticker: Task<Void, Never>?
     private var lastSaved = Date.distantPast
     private var wasPlayingBeforeFullscreen = false
+    private let log = Logger(subsystem: "local.zw.player", category: "player")
 
     /// AVKit 在进出全屏时可能自动暂停，按"进全屏前是否在播"决定是否恢复
     func handleFullscreen(_ active: Bool) {
         if active {
             wasPlayingBeforeFullscreen = player.timeControlStatus == .playing
-            NSLog("[ZWPlayer] 进入全屏，之前是否在播: %@", wasPlayingBeforeFullscreen ? "是" : "否")
+            log.notice("进入全屏，之前是否在播: \(self.wasPlayingBeforeFullscreen)")
         } else if wasPlayingBeforeFullscreen {
             player.play()
-            NSLog("[ZWPlayer] 退出全屏，恢复播放")
+            log.notice("退出全屏，恢复播放")
         }
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import OSLog
 
 /// 图片加载 + 内存缓存。
 ///
@@ -11,6 +12,7 @@ final class ImageCache {
 
     static let shared = ImageCache()
 
+    private let log = Logger(subsystem: "local.zw.player", category: "image")
     private let cache = NSCache<NSString, UIImage>()
     private var running: [String: Task<UIImage?, Never>] = [:]
     private let session: URLSession
@@ -26,7 +28,7 @@ final class ImageCache {
     func image(for url: String) async -> UIImage? {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            NSLog("[ZWImage] 空地址")
+            log.error("空图片地址")
             return nil
         }
         if let cached = cache.object(forKey: trimmed as NSString) { return cached }
@@ -52,14 +54,14 @@ final class ImageCache {
                 return try Self.decodeEncryptedImage(text)
             }
             let data = try await fetchData(url)
-            NSLog("[ZWImage] 下载成功 %@ (%d bytes)", url, data.count)
+            log.notice("下载成功 \(url, privacy: .public) \(data.count) bytes")
             guard let image = UIImage(data: data) else {
-                NSLog("[ZWImage] 解码失败 %@ (%d bytes)", url, data.count)
+                log.error("解码失败 \(url, privacy: .public) \(data.count) bytes")
                 return nil
             }
             return image
         } catch {
-            NSLog("[ZWImage] 加载失败 %@ -> %@", url, error.localizedDescription)
+            log.error("加载失败 \(url, privacy: .public) -> \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
