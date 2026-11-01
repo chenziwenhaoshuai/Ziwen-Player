@@ -6,9 +6,7 @@ struct VideoCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            RemoteImage(url: item.poster, cornerRadius: 12)
-                .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                .frame(maxWidth: .infinity)
+            PosterImage(url: item.poster)
 
             Text(item.title)
                 .font(.system(size: 14, weight: .semibold))
@@ -23,6 +21,36 @@ struct VideoCard: View {
                 .lineLimit(1)
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// 固定 2:3 的海报位：无论原图是横图还是竖图，格子尺寸都不变（超出部分裁切）
+struct PosterImage: View {
+    let url: String
+    var cornerRadius: CGFloat = 12
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Theme.panel2
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "film")
+                    .font(.system(size: 22))
+                    .foregroundColor(Theme.muted2)
+            }
+        }
+        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .task(id: url) {
+            image = await ImageCache.shared.image(for: url)
+        }
     }
 }
 

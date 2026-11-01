@@ -4,6 +4,12 @@ import SwiftUI
 @MainActor
 final class AppModel: ObservableObject {
 
+    struct PlaybackRequest {
+        let target: PlayTarget
+        let episode: Episode
+        let resume: Double
+    }
+
     struct PlayerRequest: Identifiable {
         let id = UUID()
         let target: PlayTarget
@@ -231,30 +237,25 @@ final class AppModel: ObservableObject {
 
     // MARK: - 播放
 
-    func play(_ episode: Episode) {
-        guard let item = detailItem else { return }
+    /// 解析某集的可用直链；全部候选都不是直链时返回 fallback（需要 WebView 解析）。
+    func resolve(_ episode: Episode) async -> PlaybackRequest? {
+        guard let item = detailItem else { return nil }
         let resume = resumePosition(for: episode, item: item)
-        let candidates = playbackCandidates(for: episode)
-        showToast("正在解析播放地址…")
+        var fallback: PlayTarget?
 
-        Task {
-            var fallback: PlayTarget?
-            for candidate in candidates {
-                guard let target = try? await client.resolvePlayTarget(candidate) else { continue }
-                if target.isDirectVideo {
-                    player = PlayerRequest(target: target, episode: episode, resume: resume)
-                    return
-                }
-                if fallback == nil { fallback = target }
+        for candidate in playbackCandidates(for: episode) {
+            guard let target = try? await client.resolvePlayTarget(candidate) else { continue }
+            if target.isDirectVideo {
+                return PlaybackRequest(target: target, episode: episode, resume: resume)
             }
-            let target = fallback ?? PlayTarget(
-                title: episode.title,
-                webUrl: HTML.absolutize(episode.path, base: SiteClient.base),
-                directUrl: "",
-                from: episode.from
-            )
-            player = PlayerRequest(target: target, episode: episode, resume: resume)
+            if fallback == nil { fallback = target }
         }
+
+        guard let target = fallback else {
+            showToast("没有可用的播放线路")
+            return nil
+        }
+        return PlaybackRequest(target: target, episode: episode, resume: resume)
     }
 
     private func playbackCandidates(for episode: Episode) -> [Episode] {

@@ -4,6 +4,8 @@ struct DetailScreen: View {
     @ObservedObject var model: AppModel
     let video: VideoItem
 
+    @StateObject private var engine = PlaybackEngine()
+
     var body: some View {
         ZStack {
             AppBackground()
@@ -16,7 +18,14 @@ struct DetailScreen: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 80)
                     } else if let detail = model.detail {
-                        header(detail)
+                        if engine.isActive {
+                            InlinePlayerContainer(engine: engine) {
+                                engine.finish()
+                            }
+                        } else {
+                            header(detail)
+                        }
+
                         if !detail.description.isEmpty {
                             description(detail.description)
                         }
@@ -36,6 +45,31 @@ struct DetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: video.url) {
             await model.loadDetail(video)
+        }
+        .onDisappear {
+            engine.finish()
+        }
+    }
+
+    // MARK: - 播放
+
+    private func start(_ episode: Episode) {
+        Task {
+            guard let request = await model.resolve(episode) else { return }
+
+            if request.target.isDirectVideo {
+                engine.onProgress = { position, duration in
+                    model.finishPlayback(episode: episode, position: position, duration: duration)
+                }
+                engine.load(target: request.target, episode: episode, resume: request.resume)
+            } else {
+                // 需要 WebView 抓流的线路，退回全屏播放页
+                model.player = AppModel.PlayerRequest(
+                    target: request.target,
+                    episode: episode,
+                    resume: request.resume
+                )
+            }
         }
     }
 
@@ -145,15 +179,17 @@ struct DetailScreen: View {
             LazyVGrid(columns: Layout.episodeColumns, spacing: 10) {
                 ForEach(model.activeEpisodes) { episode in
                     Button {
-                        model.play(episode)
+                        start(episode)
                     } label: {
                         Text(episode.title)
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(Theme.text)
+                            .foregroundColor(engine.episode?.id == episode.id ? .black : Theme.text)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity)
                             .frame(height: 40)
-                            .background(Theme.panel2)
+                            .background(
+                                engine.episode?.id == episode.id ? Theme.accent : Theme.panel2
+                            )
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     .buttonStyle(.plain)
