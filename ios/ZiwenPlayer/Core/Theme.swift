@@ -1,12 +1,16 @@
 import SwiftUI
 
 enum Theme {
-    static let bg = Color(hex: 0x101318)
-    static let panel = Color(hex: 0x181E27)
-    static let panel2 = Color(hex: 0x222A35)
-    static let text = Color.white
-    static let muted = Color(hex: 0xAFB8C6)
+    static let bg = Color(hex: 0x08080B)
+    static let bgSoft = Color(hex: 0x0D0D12)
+    static let panel = Color(hex: 0x121218)
+    static let panel2 = Color(hex: 0x17171F)
+    static let line = Color(hex: 0x26262F)
+    static let text = Color(hex: 0xF3F3F6)
+    static let muted = Color(hex: 0x9A9AAB)
+    static let muted2 = Color(hex: 0x6F6F7E)
     static let accent = Color(hex: 0xF7C843)
+    static let danger = Color(hex: 0xFF4D5E)
 }
 
 extension Color {
@@ -21,46 +25,40 @@ extension Color {
     }
 }
 
-/// 按屏幕高度划分的三档尺寸，对应 Android 端的 tiny / compact / regular。
-struct Metrics {
-    let compact: Bool
-    let tiny: Bool
+enum Layout {
+    /// 海报 2:3，宽度自适应
+    static let posterColumns = [GridItem(.adaptive(minimum: 108, maximum: 168), spacing: 12)]
+    static let episodeColumns = [GridItem(.adaptive(minimum: 76, maximum: 112), spacing: 10)]
+}
 
-    init(screenHeight: CGFloat) {
-        tiny = screenHeight < 420
-        compact = screenHeight < 540
+extension View {
+    /// 深色卡片：面板色 + 细描边
+    func cardBackground(corner: CGFloat = 14) -> some View {
+        background(
+            RoundedRectangle(cornerRadius: corner, style: .continuous).fill(Theme.panel)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .stroke(Theme.line, lineWidth: 1)
+        )
     }
 
-    var pageHorizontalPadding: CGFloat { tiny ? 16 : (compact ? 22 : 32) }
-    var pageTopPadding: CGFloat { tiny ? 8 : (compact ? 12 : 24) }
-    var pageBottomPadding: CGFloat { tiny ? 8 : (compact ? 10 : 18) }
+    /// iOS 26 Liquid Glass
+    func glassCard(corner: CGFloat = 18) -> some View {
+        glassEffect(.regular, in: .rect(cornerRadius: corner))
+    }
+}
 
-    var navWidth: CGFloat { tiny ? 138 : (compact ? 152 : 170) }
-    var brandTextSize: CGFloat { tiny ? 20 : (compact ? 22 : 26) }
-    var navItemHeight: CGFloat { tiny ? 34 : (compact ? 42 : 54) }
-    var navTextSize: CGFloat { tiny ? 15 : (compact ? 16 : 18) }
-    var navHorizontalPadding: CGFloat { tiny ? 14 : 20 }
-
-    var posterHeight: CGFloat { tiny ? 128 : (compact ? 154 : 190) }
-    var videoTitleSize: CGFloat { tiny ? 13 : (compact ? 14 : 15) }
-    var videoMetaSize: CGFloat { tiny ? 10 : (compact ? 11 : 12) }
-    var cardPadding: CGFloat { tiny ? 4 : (compact ? 5 : 7) }
-
-    var detailHorizontalPadding: CGFloat { tiny ? 14 : (compact ? 20 : 36) }
-    var detailVerticalPadding: CGFloat { tiny ? 8 : (compact ? 14 : 28) }
-    var detailTitleSize: CGFloat { tiny ? 20 : (compact ? 23 : 28) }
-    var detailPosterWidth: CGFloat { tiny ? 118 : (compact ? 164 : 260) }
-    var detailPosterHeight: CGFloat { tiny ? 172 : (compact ? 238 : 378) }
-    var detailMetaSize: CGFloat { tiny ? 12 : (compact ? 14 : 18) }
-    var detailDescSize: CGFloat { tiny ? 12 : (compact ? 14 : 17) }
-    var detailSectionTitleSize: CGFloat { tiny ? 15 : (compact ? 18 : 22) }
-    var detailEpisodeTextSize: CGFloat { tiny ? 13 : (compact ? 15 : 17) }
-    var detailEpisodeCellHeight: CGFloat { tiny ? 36 : (compact ? 44 : 54) }
-    var detailEpisodeSpacing: CGFloat { tiny ? 6 : (compact ? 8 : 12) }
-    var detailSourceTextSize: CGFloat { tiny ? 12 : (compact ? 14 : 16) }
-
-    /// 按宽度自适应列数，保持海报 2:3 比例
-    var catalogColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 108, maximum: 200), spacing: 12)]
+struct AppBackground: View {
+    var body: some View {
+        ZStack {
+            Theme.bg
+            LinearGradient(
+                colors: [Theme.accent.opacity(0.10), .clear, Color(hex: 0x1B1030).opacity(0.5)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
     }
 }

@@ -1,11 +1,36 @@
 import SwiftUI
 import UIKit
 
-/// 带 Referer 的远程图片（系统 AsyncImage 无法设置请求头）
+struct VideoCard: View {
+    let item: VideoItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RemoteImage(url: item.poster, cornerRadius: 12)
+                .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+
+            Text(item.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Theme.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(item.displayMeta.isEmpty ? " " : item.displayMeta)
+                .font(.system(size: 11))
+                .foregroundColor(Theme.muted)
+                .lineLimit(1)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// 带 Referer 的远程图片
 struct RemoteImage: View {
     let url: String
     var contentMode: ContentMode = .fill
-    var cornerRadius: CGFloat = 8
+    var cornerRadius: CGFloat = 10
 
     @State private var image: UIImage?
 
@@ -19,7 +44,7 @@ struct RemoteImage: View {
             } else {
                 Image(systemName: "film")
                     .font(.system(size: 22))
-                    .foregroundColor(Theme.muted.opacity(0.45))
+                    .foregroundColor(Theme.muted2)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -29,45 +54,63 @@ struct RemoteImage: View {
     }
 }
 
-struct PillButtonStyle: ButtonStyle {
-    var filled: Bool = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(filled ? .black : Theme.text)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(filled ? Theme.accent : Theme.panel)
-            .clipShape(Capsule())
-            .opacity(configuration.isPressed ? 0.7 : 1)
-    }
-}
-
-struct ToastView: View {
+struct ToastBanner: View {
     let text: String
 
     var body: some View {
         Text(text)
-            .font(.system(size: 15))
-            .foregroundColor(.white)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(Color.black.opacity(0.85))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .padding(.bottom, 30)
-            .transition(.opacity)
-    }
-}
-
-struct SectionTitle: View {
-    let text: String
-    let size: CGFloat
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .bold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundColor(Theme.text)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect(.regular, in: .capsule)
+    }
+}
+
+/// 分类胶囊（Liquid Glass）
+struct CategoryChip: View {
+    let title: String
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: active ? .bold : .medium))
+                .foregroundColor(active ? .black : Theme.text)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(
+            active ? .regular.tint(Theme.accent).interactive() : .regular.interactive(),
+            in: .capsule
+        )
+    }
+}
+
+struct EmptyStateView: View {
+    let icon: String
+    let title: String
+    var subtitle: String = ""
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 34))
+                .foregroundColor(Theme.muted2)
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(Theme.text)
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(Theme.muted)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     }
 }

@@ -4,31 +4,30 @@ struct RootView: View {
     @StateObject private var model = AppModel()
 
     var body: some View {
-        GeometryReader { geo in
-            let metrics = Metrics(screenHeight: geo.size.height)
-
-            ZStack(alignment: .bottom) {
-                Theme.bg.ignoresSafeArea()
-
-                HStack(spacing: 0) {
-                    if model.route != .detail {
-                        SidebarView(model: model, metrics: metrics)
-                    }
-                    content(metrics: metrics)
-                }
-
-                if let toast = model.toast {
-                    ToastView(text: toast)
-                }
+        TabView {
+            Tab("首页", systemImage: "house.fill") {
+                NavigationStack { HomeScreen(model: model) }
             }
-            .animation(.easeInOut(duration: 0.18), value: model.toast)
-        }
-        .preferredColorScheme(.dark)
-        .task {
-            if model.items.isEmpty {
-                model.showCatalog(title: "首页", path: "/")
+            Tab("搜索", systemImage: "magnifyingglass") {
+                NavigationStack { SearchScreen(model: model) }
+            }
+            Tab("最近", systemImage: "clock.arrow.circlepath") {
+                NavigationStack { RecentScreen(model: model) }
+            }
+            Tab("设置", systemImage: "gearshape.fill") {
+                NavigationStack { SettingsScreen(model: model) }
             }
         }
+        .tint(Theme.accent)
+        .overlay(alignment: .top) {
+            if let toast = model.toast {
+                ToastBanner(text: toast)
+                    .padding(.top, 6)
+                    .allowsHitTesting(false)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: model.toast)
         .fullScreenCover(item: $model.player) { request in
             PlayerScreen(
                 request: request,
@@ -40,19 +39,10 @@ struct RootView: View {
                 }
             )
         }
-    }
-
-    @ViewBuilder
-    private func content(metrics: Metrics) -> some View {
-        switch model.route {
-        case .catalog:
-            CatalogScreen(model: model, metrics: metrics)
-        case .detail:
-            DetailScreen(model: model, metrics: metrics)
-        case .search:
-            SearchScreen(model: model, metrics: metrics)
-        case .settings:
-            SettingsScreen(model: model, metrics: metrics)
+        .task {
+            if model.items.isEmpty {
+                model.select(AppModel.categories[0])
+            }
         }
     }
 }

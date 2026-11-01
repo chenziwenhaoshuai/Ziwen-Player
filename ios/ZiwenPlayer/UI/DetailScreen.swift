@@ -2,124 +2,166 @@ import SwiftUI
 
 struct DetailScreen: View {
     @ObservedObject var model: AppModel
-    let metrics: Metrics
-
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 78, maximum: 120), spacing: metrics.detailEpisodeSpacing)]
-    }
+    let video: VideoItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                Button {
-                    model.closeDetail()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("返回")
+        ZStack {
+            AppBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if model.detailLoading {
+                        ProgressView()
+                            .tint(Theme.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                    } else if let detail = model.detail {
+                        header(detail)
+                        if !detail.description.isEmpty {
+                            description(detail.description)
+                        }
+                        if model.activeGroups.count > 1 {
+                            sourceSection
+                        }
+                        episodeSection
+                    } else {
+                        EmptyStateView(icon: "exclamationmark.triangle", title: "加载失败", subtitle: "返回上一页重试")
                     }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Theme.text)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Theme.panel)
-                    .clipShape(Capsule())
                 }
-                .buttonStyle(.plain)
-
-                Text(model.detail?.title ?? model.selectedItem?.title ?? "详情")
-                    .font(.system(size: metrics.detailTitleSize, weight: .bold))
-                    .foregroundColor(Theme.text)
-                    .lineLimit(1)
-
-                Spacer()
-            }
-            .padding(.horizontal, metrics.detailHorizontalPadding)
-            .padding(.top, metrics.detailVerticalPadding)
-
-            if model.detailLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: Theme.accent))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let detail = model.detail {
-                ScrollView {
-                    HStack(alignment: .top, spacing: 18) {
-                        RemoteImage(url: detail.poster, cornerRadius: 10)
-                            .frame(width: metrics.detailPosterWidth, height: metrics.detailPosterHeight)
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            if !detail.meta.isEmpty {
-                                Text(detail.meta)
-                                    .font(.system(size: metrics.detailMetaSize))
-                                    .foregroundColor(Theme.muted)
-                            }
-                            Text(detail.description)
-                                .font(.system(size: metrics.detailDescSize))
-                                .foregroundColor(Theme.muted)
-                                .lineSpacing(2)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.horizontal, metrics.detailHorizontalPadding)
-
-                    let groups = detail.sourceGroups
-                    if groups.count > 1 {
-                        SectionTitle(text: "线路来源", size: metrics.detailSectionTitleSize)
-                            .padding(.horizontal, metrics.detailHorizontalPadding)
-                            .padding(.top, 16)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(groups) { group in
-                                    Button {
-                                        model.activeSource = group.source
-                                    } label: {
-                                        Text(group.title)
-                                            .font(.system(size: metrics.detailSourceTextSize, weight: .semibold))
-                                            .foregroundColor(model.activeSource == group.source ? .black : Theme.text)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 8)
-                                            .background(model.activeSource == group.source ? Theme.accent : Theme.panel)
-                                            .clipShape(Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, metrics.detailHorizontalPadding)
-                        }
-                    }
-
-                    SectionTitle(text: "剧集", size: metrics.detailSectionTitleSize)
-                        .padding(.horizontal, metrics.detailHorizontalPadding)
-                        .padding(.top, 16)
-
-                    LazyVGrid(columns: columns, spacing: metrics.detailEpisodeSpacing) {
-                        ForEach(model.activeEpisodes) { episode in
-                            Button {
-                                model.play(episode)
-                            } label: {
-                                Text(episode.title)
-                                    .font(.system(size: metrics.detailEpisodeTextSize, weight: .semibold))
-                                    .foregroundColor(Theme.text)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: metrics.detailEpisodeCellHeight)
-                                    .padding(.horizontal, 4)
-                                    .background(Theme.panel)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, metrics.detailHorizontalPadding)
-                    .padding(.bottom, metrics.detailVerticalPadding)
-                }
-            } else {
-                Text("加载失败，请返回重试")
-                    .foregroundColor(Theme.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 96)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .navigationTitle(video.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: video.url) {
+            await model.loadDetail(video)
+        }
+    }
+
+    // MARK: - 头部
+
+    private func header(_ detail: VideoDetail) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            RemoteImage(url: detail.poster, cornerRadius: 14)
+                .frame(width: 118, height: 177)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(detail.title)
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundColor(Theme.text)
+                    .lineLimit(2)
+
+                if !detail.meta.isEmpty {
+                    Text(detail.meta)
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.muted)
+                        .lineLimit(3)
+                }
+
+                HStack(spacing: 6) {
+                    infoPill("\(detail.episodes.count) 集")
+                    infoPill("\(detail.sourceGroups.count) 条线路")
+                }
+                .padding(.top, 2)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .cardBackground(corner: 18)
+    }
+
+    private func infoPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(Theme.muted)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Theme.panel2)
+            .clipShape(Capsule())
+    }
+
+    // MARK: - 简介
+
+    private func description(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("剧情简介")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.accent)
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundColor(Theme.muted)
+                .lineSpacing(3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardBackground(corner: 18)
+    }
+
+    // MARK: - 线路
+
+    private var sourceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("线路来源")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.accent)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(model.activeGroups) { group in
+                            CategoryChip(
+                                title: group.title,
+                                active: model.activeSource == group.source
+                            ) {
+                                model.activeSource = group.source
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardBackground(corner: 18)
+    }
+
+    // MARK: - 剧集
+
+    private var episodeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("剧集")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.accent)
+                Spacer()
+                Text("\(model.activeEpisodes.count) 集")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.muted2)
+            }
+
+            LazyVGrid(columns: Layout.episodeColumns, spacing: 10) {
+                ForEach(model.activeEpisodes) { episode in
+                    Button {
+                        model.play(episode)
+                    } label: {
+                        Text(episode.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Theme.text)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(Theme.panel2)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardBackground(corner: 18)
     }
 }

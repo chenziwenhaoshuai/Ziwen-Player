@@ -17,6 +17,7 @@ enum Fernet {
         }
 
         let signingKey = keyData.prefix(16)
+        let encryptionKey = Data(keyData[16..<32])
         let hmacInput = tokenData.prefix(tokenData.count - 32)
         let signature = Data(tokenData.suffix(32))
 
@@ -30,7 +31,8 @@ enum Fernet {
         let iv = Data(tokenData[ivRange])
         let cipherText = Data(tokenData[cipherRange])
 
-        let plain = try aesCBCDecrypt(cipherText: cipherText, key: keyData, iv: iv)
+        // Fernet 规范：AES-128-CBC 用的是密钥的后 16 字节（前 16 字节用于 HMAC）
+        let plain = try aesCBCDecrypt(cipherText: cipherText, key: encryptionKey, iv: iv)
         guard let text = String(data: plain, encoding: .utf8) else {
             throw SiteError.crypto
         }

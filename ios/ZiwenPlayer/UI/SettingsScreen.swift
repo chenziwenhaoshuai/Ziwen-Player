@@ -2,58 +2,75 @@ import SwiftUI
 
 struct SettingsScreen: View {
     @ObservedObject var model: AppModel
-    let metrics: Metrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("设置")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(Theme.text)
-                .padding(.horizontal, metrics.pageHorizontalPadding)
-                .padding(.top, metrics.pageTopPadding)
+        ZStack {
+            AppBackground()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    section("播放") {
-                        HStack(spacing: 12) {
+                VStack(spacing: 14) {
+                    card(title: "播放") {
+                        HStack {
                             Text("提前缓冲：\(model.preloadMinutes) 分钟")
-                                .font(.system(size: 15))
+                                .font(.system(size: 14))
                                 .foregroundColor(Theme.text)
                             Spacer()
                             Button("减少") { adjust(-1) }
-                                .buttonStyle(PillButtonStyle())
+                                .buttonStyle(GlassPillButton())
                             Button("增加") { adjust(1) }
-                                .buttonStyle(PillButtonStyle())
+                                .buttonStyle(GlassPillButton())
                         }
-                        caption("缓冲越多越流畅，也越费流量。范围 1 / 2 / 3 / 5 / 8 分钟。")
+                        caption("缓冲越多越流畅，也越费流量。可选 1 / 2 / 3 / 5 / 8 分钟。")
                     }
 
-                    section("最近观看") {
-                        Button("清除历史浏览记录") { model.clearHistory() }
-                            .buttonStyle(PillButtonStyle())
-                        caption("只保存在本机，共最多保留 \(Storage.recentLimit) 条。")
+                    card(title: "最近观看") {
+                        HStack {
+                            Text("共 \(model.recent.count) 条记录")
+                                .font(.system(size: 14))
+                                .foregroundColor(Theme.text)
+                            Spacer()
+                            Button("清除") { model.clearHistory() }
+                                .buttonStyle(GlassPillButton(tint: Theme.danger))
+                        }
+                        caption("只保存在本机，最多保留 \(Storage.recentLimit) 条。")
                     }
 
-                    section("内测模式") {
-                        Button(model.betaMode ? "内测模式：已开启" : "内测模式：未开启") {
+                    card(title: "内测模式") {
+                        Button {
                             model.toggleBetaMode()
+                        } label: {
+                            HStack {
+                                Text(model.betaMode ? "已开启" : "未开启")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Spacer()
+                                Image(systemName: model.betaMode ? "checkmark.circle.fill" : "circle")
+                            }
+                            .foregroundColor(model.betaMode ? Theme.accent : Theme.text)
+                            .padding(.horizontal, 14)
+                            .frame(height: 44)
+                            .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(PillButtonStyle(filled: model.betaMode))
+                        .buttonStyle(.plain)
+                        .glassEffect(
+                            model.betaMode ? .regular.tint(Theme.accent.opacity(0.35)).interactive() : .regular.interactive(),
+                            in: .capsule
+                        )
                         caption("开启后会显示额外的分类入口。")
                     }
 
-                    section("关于") {
-                        Text("当前版本：\(model.version)")
-                            .font(.system(size: 14))
-                            .foregroundColor(Theme.muted)
-                        caption("iOS 移植版 · SwiftUI + AVPlayer。仅供学习使用。")
+                    card(title: "关于") {
+                        infoRow("版本", model.version)
+                        infoRow("引擎", "SwiftUI + AVPlayer")
+                        caption("iOS 移植版，仅供学习使用。")
                     }
                 }
-                .padding(.horizontal, metrics.pageHorizontalPadding)
-                .padding(.bottom, metrics.pageBottomPadding)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 96)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func adjust(_ delta: Int) {
@@ -64,7 +81,7 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func card<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
@@ -72,14 +89,42 @@ struct SettingsScreen: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Theme.panel)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(14)
+        .cardBackground(corner: 18)
+    }
+
+    private func infoRow(_ name: String, _ value: String) -> some View {
+        HStack {
+            Text(name)
+                .font(.system(size: 13))
+                .foregroundColor(Theme.muted)
+            Spacer()
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.text)
+        }
     }
 
     private func caption(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12))
-            .foregroundColor(Theme.muted)
+            .font(.system(size: 11))
+            .foregroundColor(Theme.muted2)
+    }
+}
+
+struct GlassPillButton: ButtonStyle {
+    var tint: Color? = nil
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(tint ?? Theme.text)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(
+                tint == nil ? .regular.interactive() : .regular.tint(tint!.opacity(0.3)).interactive(),
+                in: .capsule
+            )
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }

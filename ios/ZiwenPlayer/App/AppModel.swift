@@ -4,13 +4,6 @@ import SwiftUI
 @MainActor
 final class AppModel: ObservableObject {
 
-    enum Route {
-        case catalog
-        case detail
-        case search
-        case settings
-    }
-
     struct PlayerRequest: Identifiable {
         let id = UUID()
         let target: PlayTarget
@@ -18,38 +11,39 @@ final class AppModel: ObservableObject {
         let resume: Double
     }
 
-    // MARK: - 状态
-
-    @Published var route: Route = .catalog
+    // 列表
     @Published var title: String = "首页"
     @Published var path: String = "/"
     @Published var items: [VideoItem] = []
     @Published var loading: Bool = false
-    @Published var detailLoading: Bool = false
-    @Published var toast: String?
+    @Published var loadingMore: Bool = false
 
+    // 详情
     @Published var detail: VideoDetail?
-    @Published var selectedItem: VideoItem?
+    @Published var detailItem: VideoItem?
+    @Published var detailLoading: Bool = false
     @Published var activeSource: Int = 0
 
+    // 本地状态
     @Published var recent: [VideoItem] = []
     @Published var betaMode: Bool = Storage.betaMode
     @Published var preloadMinutes: Int = Storage.preloadMinutes
 
+    // 搜索
     @Published var searchKeyword: String = ""
     @Published var searchResults: [VideoItem] = []
     @Published var searching: Bool = false
 
+    // 播放器
     @Published var player: PlayerRequest?
 
-    // MARK: - 私有
+    @Published var toast: String?
 
     private let client = SiteClient()
     private var page = 1
     private var pagingKind = ""
     private var pagedMode = false
     private var hasMore = false
-    private var loadingMore = false
     private var toastTask: Task<Void, Never>?
 
     static let categories: [Category] = [
@@ -70,9 +64,7 @@ final class AppModel: ObservableObject {
         betaMode ? Self.categories + [Self.peachCategory] : Self.categories
     }
 
-    var isPeachSelected: Bool {
-        path.hasPrefix(SiteClient.peachPath)
-    }
+    var isPeachSelected: Bool { path.hasPrefix(SiteClient.peachPath) }
 
     var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -92,40 +84,24 @@ final class AppModel: ObservableObject {
 
     // MARK: - 列表
 
-    func showCatalog(title: String, path: String) {
-        self.title = title
-        self.path = path
-        route = .catalog
+    func select(_ category: Category) {
+        title = category.name
+        path = category.path
         page = 1
-        pagingKind = Self.pagingKind(for: path)
+        pagingKind = Self.pagingKind(for: category.path)
         pagedMode = !pagingKind.isEmpty
         hasMore = pagedMode
-        loadingMore = false
         items = []
-        loadCatalog(reset: true)
+        load(reset: true)
     }
 
-    func showRecentWatches() {
-        title = "最近观看"
-        path = "/"
-        route = .catalog
-        pagedMode = false
-        hasMore = false
-        page = 1
-        pagingKind = ""
-        items = recent
-        if items.isEmpty { showToast("暂无最近观看") }
-    }
-
-    private func loadCatalog(reset: Bool) {
-        let requestedPath = reset ? path : Self.pagedPath(kind: pagingKind, page: page)
-        if reset {
-            guard !path.hasPrefix(SiteClient.peachPath) || betaMode else {
-                showCatalog(title: "首页", path: "/")
-                return
-            }
+    private func load(reset: Bool) {
+        if reset && path.hasPrefix(SiteClient.peachPath) && !betaMode {
+            select(Self.categories[0])
+            return
         }
-        loading = items.isEmpty
+        let requestedPath = reset ? path : Self.pagedPath(kind: pagingKind, page: page)
+        if reset { loading = true }
         Task {
             do {
                 let result = try await client.fetchCatalog(requestedPath)
@@ -140,8 +116,6 @@ final class AppModel: ObservableObject {
                 if result.isEmpty {
                     hasMore = false
                     if !reset { showToast("没有更多内容了") }
-                } else {
-                    hasMore = pagedMode
                 }
                 if reset && items.isEmpty { showToast("没有加载到内容") }
             } catch {
@@ -160,7 +134,7 @@ final class AppModel: ObservableObject {
         guard index >= items.count - 8 else { return }
         loadingMore = true
         page += 1
-        loadCatalog(reset: false)
+        load(reset: false)
     }
 
     func refreshPeachRandomly() {
@@ -200,20 +174,11 @@ final class AppModel: ObservableObject {
         case "4": id = "4"
         default: return "/"
         }
-        if page <= 1 {
-            return "/vod-show/\(id)--time---------.html"
-        }
+        if page <= 1 { return "/vod-show/\(id)--time---------.html" }
         return "/vod-show/\(id)--time------\(page)---.html"
     }
 
     // MARK: - 搜索
-
-    func openSearch() {
-        route = .search
-        if searchResults.isEmpty {
-            searching = false
-        }
-    }
 
     func performSearch(_ keyword: String) {
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,30 +202,22 @@ final class AppModel: ObservableObject {
 
     // MARK: - 详情
 
-    func openDetail(_ item: VideoItem) {
-        selectedItem = item
+    func loadDetail(_ item: VideoItem) async {
+        if detailItem?.url == item.url, detail != nil { return }
+        detailItem = item
         detail = nil
         detailLoading = true
-        route = .detail
-        Task {
-            do {
-                let loaded = try await client.fetchDetail(item)
-                detail = loaded
-                restoreSourceSelection(for: item, in: loaded)
-            } catch {
-                showToast(error.localizedDescription)
-            }
-            detailLoading = false
+        do {
+            let loaded = try await client.fetchDetail(item)
+            detail = loaded
+            let groups = loaded.sourceGroups
+            activeSource = groups.first(where: { $0.source == item.episodeSource })?.source
+                ?? groups.first?.source
+                ?? 0
+        } catch {
+            showToast(error.localizedDescription)
         }
-    }
-
-    private func restoreSourceSelection(for item: VideoItem, in detail: VideoDetail) {
-        let groups = detail.sourceGroups
-        if let matched = groups.first(where: { $0.source == item.episodeSource }) {
-            activeSource = matched.source
-        } else {
-            activeSource = groups.first?.source ?? 0
-        }
+        detailLoading = false
     }
 
     var activeEpisodes: [Episode] {
@@ -268,16 +225,14 @@ final class AppModel: ObservableObject {
         return detail.sourceGroups.first(where: { $0.source == activeSource })?.episodes ?? []
     }
 
-    func closeDetail() {
-        detail = nil
-        selectedItem = nil
-        showCatalog(title: title, path: path)
+    var activeGroups: [SourceGroup] {
+        detail?.sourceGroups ?? []
     }
 
     // MARK: - 播放
 
     func play(_ episode: Episode) {
-        guard let item = selectedItem else { return }
+        guard let item = detailItem else { return }
         let resume = resumePosition(for: episode, item: item)
         let candidates = playbackCandidates(for: episode)
         showToast("正在解析播放地址…")
@@ -326,9 +281,9 @@ final class AppModel: ObservableObject {
     }
 
     func finishPlayback(episode: Episode?, position: Double, duration: Double) {
-        guard let episode, var item = selectedItem else { return }
+        guard let episode, var item = detailItem else { return }
         item = item.withProgress(episode: episode, position: position, duration: duration)
-        selectedItem = item
+        detailItem = item
         recent = Storage.upsertRecent(item, into: recent)
         Storage.saveRecent(recent)
     }
@@ -341,7 +296,7 @@ final class AppModel: ObservableObject {
         recent = Storage.loadRecent(betaMode: betaMode)
         showToast(betaMode ? "内测模式已开启" : "内测模式已关闭")
         if !betaMode && isPeachSelected {
-            showCatalog(title: "首页", path: "/")
+            select(Self.categories[0])
         }
     }
 

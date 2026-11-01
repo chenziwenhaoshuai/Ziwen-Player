@@ -2,57 +2,84 @@ import SwiftUI
 
 struct SearchScreen: View {
     @ObservedObject var model: AppModel
-    let metrics: Metrics
-
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 110, maximum: 180), spacing: 12)]
-    }
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                TextField("输入片名、演员或关键词", text: $model.searchKeyword)
+        ZStack {
+            AppBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    searchBar
+
+                    if model.searching {
+                        ProgressView()
+                            .tint(Theme.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                    } else if model.searchResults.isEmpty {
+                        EmptyStateView(
+                            icon: "magnifyingglass",
+                            title: "输入关键词后按搜索",
+                            subtitle: "支持片名、演员"
+                        )
+                    } else {
+                        LazyVGrid(columns: Layout.posterColumns, spacing: 16) {
+                            ForEach(model.searchResults) { item in
+                                NavigationLink(value: item) {
+                                    VideoCard(item: item)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+                .padding(.bottom, 96)
+            }
+            .scrollDismissesKeyboard(.immediately)
+        }
+        .navigationTitle("搜索")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: VideoItem.self) { item in
+            DetailScreen(model: model, video: item)
+        }
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Theme.muted2)
+
+                TextField("片名、演员或关键词", text: $model.searchKeyword)
                     .textFieldStyle(.plain)
+                    .focused($focused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .foregroundColor(Theme.text)
-                    .padding(.horizontal, 16)
-                    .frame(height: 44)
-                    .background(Theme.panel)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .onSubmit { model.performSearch(model.searchKeyword) }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .glassEffect(.regular, in: .capsule)
 
-                Button("搜索") { model.performSearch(model.searchKeyword) }
-                    .buttonStyle(PillButtonStyle(filled: true))
+            Button {
+                focused = false
+                model.performSearch(model.searchKeyword)
+            } label: {
+                Text("搜索")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 18)
                     .frame(height: 44)
             }
-            .padding(.horizontal, metrics.pageHorizontalPadding)
-            .padding(.top, metrics.pageTopPadding)
-
-            if model.searching {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: Theme.accent))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
-            } else if model.searchResults.isEmpty {
-                Text("输入关键词后按搜索")
-                    .foregroundColor(Theme.muted)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(model.searchResults) { item in
-                            VideoCard(item: item, metrics: metrics)
-                                .onTapGesture { model.openDetail(item) }
-                        }
-                    }
-                    .padding(.horizontal, metrics.pageHorizontalPadding)
-                    .padding(.bottom, metrics.pageBottomPadding)
-                }
-            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.tint(Theme.accent).interactive(), in: .capsule)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
     }
 }
