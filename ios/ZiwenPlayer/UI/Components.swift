@@ -44,7 +44,7 @@ struct PosterImage: View {
                     .foregroundColor(Theme.muted2)
             }
         }
-        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+        .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

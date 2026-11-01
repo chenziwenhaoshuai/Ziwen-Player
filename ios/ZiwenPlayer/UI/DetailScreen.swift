@@ -5,6 +5,7 @@ struct DetailScreen: View {
     let video: VideoItem
 
     @StateObject private var engine = PlaybackEngine()
+    @State private var isFullscreen = false
 
     var body: some View {
         ZStack {
@@ -19,7 +20,9 @@ struct DetailScreen: View {
                             .padding(.top, 80)
                     } else if let detail = model.detail {
                         if engine.isActive {
-                            InlinePlayerContainer(engine: engine) {
+                            InlinePlayerContainer(engine: engine, onFullscreenChange: { fullscreen in
+                                isFullscreen = fullscreen
+                            }) {
                                 engine.finish()
                             }
                         } else {
@@ -47,7 +50,13 @@ struct DetailScreen: View {
             await model.loadDetail(video)
         }
         .onDisappear {
-            engine.finish()
+            // 系统全屏也会触发 onDisappear，且回调顺序不保证：延迟判断，全屏中不停止
+            Task {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                if !isFullscreen {
+                    engine.finish()
+                }
+            }
         }
     }
 

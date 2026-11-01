@@ -49,8 +49,13 @@ final class ImageCache {
                 return try Self.decodeEncryptedImage(text)
             }
             let data = try await fetchData(url)
-            return UIImage(data: data)
+            guard let image = UIImage(data: data) else {
+                NSLog("[ZWImage] 解码失败 %@ (%d bytes)", url, data.count)
+                return nil
+            }
+            return image
         } catch {
+            NSLog("[ZWImage] 加载失败 %@ -> %@", url, error.localizedDescription)
             return nil
         }
     }

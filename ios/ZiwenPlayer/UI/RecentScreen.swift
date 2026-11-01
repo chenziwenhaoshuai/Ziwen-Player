@@ -43,7 +43,7 @@ struct RecentScreen: View {
     private func row(_ item: VideoItem) -> some View {
         HStack(spacing: 12) {
             RemoteImage(url: item.poster, cornerRadius: 10)
-                .frame(width: 62, height: 93)
+                .frame(width: 96, height: 54)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)

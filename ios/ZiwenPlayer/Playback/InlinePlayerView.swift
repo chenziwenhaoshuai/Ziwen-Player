@@ -4,6 +4,11 @@ import AVKit
 /// 页内播放器：AVPlayerViewController 自带播放/暂停、进度条、全屏、画中画、AirPlay。
 struct InlineVideoView: UIViewControllerRepresentable {
     let player: AVPlayer
+    var onFullscreenChange: (Bool) -> Void = { _ in }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFullscreenChange: onFullscreenChange)
+    }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
@@ -13,6 +18,7 @@ struct InlineVideoView: UIViewControllerRepresentable {
         controller.canStartPictureInPictureAutomaticallyFromInline = true
         controller.videoGravity = .resizeAspect
         controller.updatesNowPlayingInfoCenter = false
+        controller.delegate = context.coordinator
         return controller
     }
 
@@ -21,17 +27,40 @@ struct InlineVideoView: UIViewControllerRepresentable {
             controller.player = player
         }
     }
+
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        private let onFullscreenChange: (Bool) -> Void
+
+        init(onFullscreenChange: @escaping (Bool) -> Void) {
+            self.onFullscreenChange = onFullscreenChange
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            onFullscreenChange(true)
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            onFullscreenChange(false)
+        }
+    }
 }
 
 /// 顶部播放区域：16:9 黑底 + 18 圆角，右上角关闭按钮
 struct InlinePlayerContainer: View {
     @ObservedObject var engine: PlaybackEngine
+    var onFullscreenChange: (Bool) -> Void = { _ in }
     var onClose: () -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.black
-            InlineVideoView(player: engine.player)
+            InlineVideoView(player: engine.player, onFullscreenChange: onFullscreenChange)
 
             if engine.failed {
                 VStack(spacing: 8) {

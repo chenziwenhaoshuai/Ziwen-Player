@@ -27,7 +27,7 @@ extension Color {
 
 enum Layout {
     /// 海报 2:3，宽度自适应
-    static let posterColumns = [GridItem(.adaptive(minimum: 108, maximum: 168), spacing: 12)]
+    static let posterColumns = [GridItem(.adaptive(minimum: 152, maximum: 240), spacing: 12)]
     static let episodeColumns = [GridItem(.adaptive(minimum: 76, maximum: 112), spacing: 10)]
 }
 
