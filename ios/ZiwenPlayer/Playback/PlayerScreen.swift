@@ -40,10 +40,19 @@ struct PlayerScreen: View {
                             .padding(.horizontal, 40)
                         HStack(spacing: 12) {
                             Button("重新加载") { start() }
-                                .buttonStyle(PillButtonStyle(filled: true))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .background(Theme.accent, in: .capsule)
                             Button("返回") { close() }
-                                .buttonStyle(PillButtonStyle(filled: false))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Theme.text)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .background(Theme.panel, in: .capsule)
                         }
+                        .buttonStyle(.plain)
                     } else {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: Theme.accent))
