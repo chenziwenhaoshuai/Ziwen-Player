@@ -20,16 +20,21 @@ final class PlaybackEngine: ObservableObject {
     private var ticker: Task<Void, Never>?
     private var lastSaved = Date.distantPast
     private var wasPlayingBeforeFullscreen = false
+    private var lastKnownPlaying = false
     private let log = Logger(subsystem: "local.zw.player", category: "player")
 
     /// AVKit 在进出全屏时可能自动暂停，按"进全屏前是否在播"决定是否恢复
     func handleFullscreen(_ active: Bool) {
         if active {
-            wasPlayingBeforeFullscreen = player.timeControlStatus == .playing
+            wasPlayingBeforeFullscreen = lastKnownPlaying || player.timeControlStatus == .playing
             log.notice("进入全屏，之前是否在播: \(self.wasPlayingBeforeFullscreen)")
         } else if wasPlayingBeforeFullscreen {
-            player.play()
-            log.notice("退出全屏，恢复播放")
+            // AVKit 退出全屏会自行暂停，稍等过渡结束再恢复
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                self?.player.play()
+                self?.log.notice("退出全屏，恢复播放")
+            }
         }
     }
 
@@ -87,6 +92,7 @@ final class PlaybackEngine: ObservableObject {
     }
 
     private func tick() {
+        lastKnownPlaying = (player.timeControlStatus == .playing)
         guard let item = player.currentItem else { return }
 
         if item.status == .failed {
